@@ -1,0 +1,15 @@
+{
+  "manifest_version": 3,
+  "name": "Elevo: copiar notas de Idukay",
+  "version": "0.3.0",
+  "description": "Copia tus actividades y calificaciones de Idukay en formato JSON para importarlas en Elevo.",
+  "permissions": [
+    "activeTab",
+    "scripting",
+    "clipboardWrite"
+  ],
+  "action": {
+    "default_title": "Copiar notas de Idukay",
+    "default_popup": "popup.html"
+  }
+}

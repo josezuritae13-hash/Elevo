@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Elevo</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<section id="auth" class="card auth">
+  <h1>Elevo</h1>
+  <p class="muted">Tu seguimiento académico</p>
+  <input id="email" type="email" placeholder="Correo" autocomplete="email">
+  <input id="pass" type="password" placeholder="Contraseña (mín. 6 caracteres)" autocomplete="current-password">
+  <div class="row"><button id="btnLogin">Entrar</button><button id="btnSignup" class="ghost">Crear cuenta</button></div>
+  <p id="authMsg" class="muted"></p>
+</section>
+
+<main id="app" hidden>
+  <header>
+    <h1>Elevo</h1>
+    <div class="row"><span id="who" class="muted"></span><button id="btnOut" class="ghost">Salir</button></div>
+  </header>
+  <nav class="tabs">
+    <button data-go="panel">Panel</button><button data-go="metas">Metas y plan</button><button data-go="calc">Calculadora</button><button data-go="importar">Importar</button>
+  </nav>
+
+  <div data-view="panel">
+    <div class="row" style="justify-content:flex-start;margin-top:12px"><span class="muted">Ver:</span>
+      <select id="termSel"><option value="all">Todo el año</option><option value="1">Trimestre 1</option><option value="2">Trimestre 2</option><option value="3">Trimestre 3</option></select></div>
+    <section class="grid">
+      <div class="card stat"><span class="muted">Promedio general (sobre 10)</span><strong id="avgAll">–</strong></div>
+      <div class="card stat"><span class="muted">Materias</span><strong id="countSub">0</strong></div>
+      <div class="card stat"><span class="muted">Evaluaciones pendientes</span><strong id="countPend">0</strong></div>
+      <div class="card stat"><span class="muted">Metas activas</span><strong id="countGoals">0</strong></div>
+      <div class="card stat"><span class="muted">Cambio en 30 días</span><strong id="chg">–</strong></div>
+    </section>
+
+    <div class="card tip"><strong>Recomendación</strong><p id="tip" style="margin:4px 0 0"></p>
+      <span class="muted">Se basa en tus notas registradas; no es una predicción.</span></div>
+    <div class="grid two">
+      <div class="card"><h3>Necesitan atención</h3><ul id="attn" class="plain"></ul></div>
+      <div class="card"><h3>Próximas evaluaciones</h3><ul id="upcoming" class="plain"></ul></div>
+    </div>
+    <h2>Estadísticas</h2>
+    <div class="grid two">
+      <div class="card"><h3>Evolución del promedio (%)</h3>
+        <p id="chEmpty" class="muted">Registra evaluaciones con nota y fecha para ver tu evolución.</p>
+        <div class="chartbox"><canvas id="chEvo"></canvas></div></div>
+      <div class="card"><h3>Promedio por materia (%)</h3><div class="chartbox"><canvas id="chBar"></canvas></div></div>
+    </div>
+
+    <h2>Mis materias</h2>
+    <form id="subjForm" class="card">
+      <label>Nombre<input id="sName" required maxlength="60"></label>
+      <label>Periodo<input id="sPeriod" placeholder="Trimestre 1"></label>
+      <label>Escala
+        <select id="sScale"><option value="10">0 a 10</option><option value="20">0 a 20</option><option value="100">0 a 100</option></select>
+      </label>
+      <label>Cálculo
+        <select id="sSystem"><option value="">Promedio simple</option><option value="ap70">Formativa 70% + Sumativa 30%</option></select>
+      </label>
+      <label>Color<input id="sColor" type="color" value="#4f46e5"></label>
+      <button id="sSave">Agregar materia</button>
+      <button type="button" id="sCancel" class="ghost" hidden>Cancelar</button>
+    </form>
+    <div id="subjects" class="grid list"></div>
+
+    <h2>Calificaciones</h2>
+    <form id="assForm" class="card">
+      <label>Materia<select id="aSubject" required></select></label>
+      <label>Evaluación<input id="aName" required maxlength="80"></label>
+      <label>Tipo
+        <select id="aType"><option>formativa</option><option>sumativa</option><option>examen</option><option>prueba corta</option><option>tarea</option><option>proyecto</option><option>otro</option></select>
+      </label>
+      <label>Nota (vacía = pendiente)<input id="aScore" type="number" step="any" min="0"></label>
+      <label>Nota máxima<input id="aMax" type="number" step="any" min="0.01" value="10" required></label>
+      <label>Peso % (opcional)<input id="aWeight" type="number" step="any" min="0" max="100"></label>
+      <label>Trimestre<select id="aTerm"><option value="1">Trimestre 1</option><option value="2">Trimestre 2</option><option value="3">Trimestre 3</option></select></label>
+      <label>Fecha<input id="aDate" type="date"></label>
+      <button id="aSave">Guardar evaluación</button>
+      <button type="button" id="aCancel" class="ghost" hidden>Cancelar</button>
+    </form>
+    <div class="card wrap">
+      <table>
+        <thead><tr><th>Materia</th><th>Evaluación</th><th>Tipo</th><th>Trim.</th><th>Nota</th><th>Peso</th><th>Fecha</th><th></th></tr></thead>
+        <tbody id="assessments"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <div data-view="metas" hidden>
+    <h2>Nueva meta</h2>
+    <form id="goalForm" class="card">
+      <label>Materia<select id="gSubject" required></select></label>
+      <label>Título<input id="gTitle" required maxlength="80" placeholder="Subir mi promedio"></label>
+      <label>Promedio objetivo<input id="gTarget" type="number" step="any" min="0" required></label>
+      <label>Fecha límite<input id="gDeadline" type="date"></label>
+      <button>Crear meta</button>
+    </form>
+    <p class="muted">El punto de partida es tu promedio actual. El avance se calcula con tus notas reales. Para mantener tu nota, pon un objetivo igual o menor a tu promedio.</p>
+    <div id="goals" class="grid list"></div>
+  </div>
+
+  <div data-view="calc" hidden>
+    <h2>¿Qué nota necesito?</h2>
+    <form id="calcForm" class="card">
+      <label>Materia<select id="cSubject"></select></label>
+      <label>Promedio que quiero<input id="cTarget" type="number" step="any" min="0" required></label>
+      <label id="cCatWrap" hidden>Categoría que falta<select id="cCat"></select></label>
+      <label id="cPendWrap"><span id="cPendLabel">Evaluaciones que faltan</span><input id="cPend" type="number" step="any" min="0" value="1"></label>
+      <button>Calcular</button>
+    </form>
+    <div id="calcOut" class="card" hidden></div>
+  </div>
+  <div data-view="importar" hidden>
+    <h2>Importar notas de Idukay</h2>
+    <div class="card">
+      <p class="muted"><strong>1.</strong> Instala la extensión <em>Elevo · Idukay</em> en Chrome (carpeta <code>elevo-extension</code>).</p>
+      <p class="muted"><strong>2.</strong> Con Idukay abierto en esta pestaña, pulsa «Copiar mis notas» en la extensión (copia un JSON con todas tus actividades). <strong>3.</strong> Vuelve aquí y pega (Ctrl+V):</p>
+      <p class="muted">Ajustes para el JSON de la extensión (cambia las fechas según tu colegio):</p>
+      <div class="row" style="justify-content:flex-start;align-items:flex-end;gap:12px">
+        <label>Año escolar desde<input id="jFrom" type="date"></label>
+        <label>Trimestre 1 termina<input id="jT1" type="date"></label>
+        <label>Trimestre 2 termina<input id="jT2" type="date"></label>
+        <label class="chk"><input type="checkbox" id="jPast"> Incluir pendientes con fecha pasada</label>
+      </div>
+      <textarea id="impText" rows="6" placeholder="Pega aquí el JSON (o la tabla) copiado de Idukay"></textarea>
+      <button id="impPreview" type="button">Revisar</button>
+    </div>
+    <div id="impOut" class="card" hidden></div>
+  </div>
+</main>
+
+<div id="toast"></div>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
