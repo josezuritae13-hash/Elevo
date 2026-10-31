@@ -1,140 +1,223 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="es">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Elevo</title>
-<link rel="stylesheet" href="style.css">
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#0b1120">
+  <meta name="description" content="Elevate te ayuda a organizar tus calificaciones, establecer metas y seguir tu progreso académico.">
+  <meta property="og:title" content="Elevate — Tu progreso académico">
+  <meta property="og:description" content="Organiza tus calificaciones, establece metas y sigue tu evolución académica.">
+  <meta property="og:type" content="website">
+  <link rel="icon" type="image/svg+xml" href="favicon.svg">
+  <title>Elevate — Tu progreso académico</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Manrope:wght@500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+  <script>
+    try {
+      const savedTheme = localStorage.getItem('elevate-theme');
+      document.documentElement.dataset.theme = savedTheme || 'dark';
+    } catch (_) {
+      document.documentElement.dataset.theme = 'dark';
+    }
+  </script>
 </head>
 <body>
-<section id="auth" class="card auth">
-  <h1>Elevo</h1>
-  <p class="muted">Tu seguimiento académico</p>
-  <input id="email" type="email" placeholder="Correo" autocomplete="email">
-  <input id="pass" type="password" placeholder="Contraseña (mín. 6 caracteres)" autocomplete="current-password">
-  <div class="row"><button id="btnLogin">Entrar</button><button id="btnSignup" class="ghost">Crear cuenta</button></div>
-  <p id="authMsg" class="muted"></p>
-</section>
+  <div class="ambient ambient-one" aria-hidden="true"></div>
+  <div class="ambient ambient-two" aria-hidden="true"></div>
 
-<main id="app" hidden>
-  <header>
-    <h1>Elevo</h1>
-    <div class="row"><span id="who" class="muted"></span><button id="btnOut" class="ghost">Salir</button></div>
-  </header>
-  <nav class="tabs">
-    <button data-go="panel">Panel</button><button data-go="metas">Metas y plan</button><button data-go="calc">Calculadora</button><button data-go="importar">Importar</button>
-  </nav>
-
-  <div data-view="panel">
-    <div class="row" style="justify-content:flex-start;margin-top:12px"><span class="muted">Ver:</span>
-      <select id="termSel"><option value="all">Todo el año</option><option value="1">Trimestre 1</option><option value="2">Trimestre 2</option><option value="3">Trimestre 3</option></select></div>
-    <section class="grid">
-      <div class="card stat"><span class="muted">Promedio general (sobre 10)</span><strong id="avgAll">–</strong></div>
-      <div class="card stat"><span class="muted">Materias</span><strong id="countSub">0</strong></div>
-      <div class="card stat"><span class="muted">Evaluaciones pendientes</span><strong id="countPend">0</strong></div>
-      <div class="card stat"><span class="muted">Metas activas</span><strong id="countGoals">0</strong></div>
-      <div class="card stat"><span class="muted">Cambio en 30 días</span><strong id="chg">–</strong></div>
-    </section>
-
-    <div class="card tip"><strong>Recomendación</strong><p id="tip" style="margin:4px 0 0"></p>
-      <span class="muted">Se basa en tus notas registradas; no es una predicción.</span></div>
-    <div class="grid two">
-      <div class="card"><h3>Necesitan atención</h3><ul id="attn" class="plain"></ul></div>
-      <div class="card"><h3>Próximas evaluaciones</h3><ul id="upcoming" class="plain"></ul></div>
-    </div>
-    <h2>Estadísticas</h2>
-    <div class="grid two">
-      <div class="card"><h3>Evolución del promedio (%)</h3>
-        <p id="chEmpty" class="muted">Registra evaluaciones con nota y fecha para ver tu evolución.</p>
-        <div class="chartbox"><canvas id="chEvo"></canvas></div></div>
-      <div class="card"><h3>Promedio por materia (%)</h3><div class="chartbox"><canvas id="chBar"></canvas></div></div>
-    </div>
-
-    <h2>Mis materias</h2>
-    <form id="subjForm" class="card">
-      <label>Nombre<input id="sName" required maxlength="60"></label>
-      <label>Periodo<input id="sPeriod" placeholder="Trimestre 1"></label>
-      <label>Escala
-        <select id="sScale"><option value="10">0 a 10</option><option value="20">0 a 20</option><option value="100">0 a 100</option></select>
-      </label>
-      <label>Cálculo
-        <select id="sSystem"><option value="">Promedio simple</option><option value="ap70">Formativa 70% + Sumativa 30%</option></select>
-      </label>
-      <label>Color<input id="sColor" type="color" value="#4f46e5"></label>
-      <button id="sSave">Agregar materia</button>
-      <button type="button" id="sCancel" class="ghost" hidden>Cancelar</button>
-    </form>
-    <div id="subjects" class="grid list"></div>
-
-    <h2>Calificaciones</h2>
-    <form id="assForm" class="card">
-      <label>Materia<select id="aSubject" required></select></label>
-      <label>Evaluación<input id="aName" required maxlength="80"></label>
-      <label>Tipo
-        <select id="aType"><option>formativa</option><option>sumativa</option><option>examen</option><option>prueba corta</option><option>tarea</option><option>proyecto</option><option>otro</option></select>
-      </label>
-      <label>Nota (vacía = pendiente)<input id="aScore" type="number" step="any" min="0"></label>
-      <label>Nota máxima<input id="aMax" type="number" step="any" min="0.01" value="10" required></label>
-      <label>Peso % (opcional)<input id="aWeight" type="number" step="any" min="0" max="100"></label>
-      <label>Trimestre<select id="aTerm"><option value="1">Trimestre 1</option><option value="2">Trimestre 2</option><option value="3">Trimestre 3</option></select></label>
-      <label>Fecha<input id="aDate" type="date"></label>
-      <button id="aSave">Guardar evaluación</button>
-      <button type="button" id="aCancel" class="ghost" hidden>Cancelar</button>
-    </form>
-    <div class="card wrap">
-      <table>
-        <thead><tr><th>Materia</th><th>Evaluación</th><th>Tipo</th><th>Trim.</th><th>Nota</th><th>Peso</th><th>Fecha</th><th></th></tr></thead>
-        <tbody id="assessments"></tbody>
-      </table>
-    </div>
-  </div>
-
-  <div data-view="metas" hidden>
-    <h2>Nueva meta</h2>
-    <form id="goalForm" class="card">
-      <label>Materia<select id="gSubject" required></select></label>
-      <label>Título<input id="gTitle" required maxlength="80" placeholder="Subir mi promedio"></label>
-      <label>Promedio objetivo<input id="gTarget" type="number" step="any" min="0" required></label>
-      <label>Fecha límite<input id="gDeadline" type="date"></label>
-      <button>Crear meta</button>
-    </form>
-    <p class="muted">El punto de partida es tu promedio actual. El avance se calcula con tus notas reales. Para mantener tu nota, pon un objetivo igual o menor a tu promedio.</p>
-    <div id="goals" class="grid list"></div>
-  </div>
-
-  <div data-view="calc" hidden>
-    <h2>¿Qué nota necesito?</h2>
-    <form id="calcForm" class="card">
-      <label>Materia<select id="cSubject"></select></label>
-      <label>Promedio que quiero<input id="cTarget" type="number" step="any" min="0" required></label>
-      <label id="cCatWrap" hidden>Categoría que falta<select id="cCat"></select></label>
-      <label id="cPendWrap"><span id="cPendLabel">Evaluaciones que faltan</span><input id="cPend" type="number" step="any" min="0" value="1"></label>
-      <button>Calcular</button>
-    </form>
-    <div id="calcOut" class="card" hidden></div>
-  </div>
-  <div data-view="importar" hidden>
-    <h2>Importar notas de Idukay</h2>
-    <div class="card">
-      <p class="muted"><strong>1.</strong> Instala la extensión <em>Elevo · Idukay</em> en Chrome (carpeta <code>elevo-extension</code>).</p>
-      <p class="muted"><strong>2.</strong> Con Idukay abierto en esta pestaña, pulsa «Copiar mis notas» en la extensión (copia un JSON con todas tus actividades). <strong>3.</strong> Vuelve aquí y pega (Ctrl+V):</p>
-      <p class="muted">Ajustes para el JSON de la extensión (cambia las fechas según tu colegio):</p>
-      <div class="row" style="justify-content:flex-start;align-items:flex-end;gap:12px">
-        <label>Año escolar desde<input id="jFrom" type="date"></label>
-        <label>Trimestre 1 termina<input id="jT1" type="date"></label>
-        <label>Trimestre 2 termina<input id="jT2" type="date"></label>
-        <label class="chk"><input type="checkbox" id="jPast"> Incluir pendientes con fecha pasada</label>
+  <section id="auth" class="auth-layout" aria-labelledby="authTitle">
+    <div class="auth-showcase">
+      <a class="brand brand-large" href="#inicio" aria-label="Elevate, inicio">
+        <span class="brand-mark">E</span>
+        <span class="brand-name">elevate<span class="brand-dot">.</span></span>
+      </a>
+      <div class="showcase-copy">
+        <span class="eyebrow"><span class="pulse-dot"></span> TU PROGRESO, CON PROPÓSITO</span>
+        <h1>El siguiente nivel de tu vida académica <span>empieza aquí.</span></h1>
+        <p>Entiende tus resultados, organiza tus objetivos y convierte cada avance en motivación para seguir mejorando.</p>
       </div>
-      <textarea id="impText" rows="6" placeholder="Pega aquí el JSON (o la tabla) copiado de Idukay"></textarea>
-      <button id="impPreview" type="button">Revisar</button>
+      <div class="showcase-highlights">
+        <div class="highlight-item"><span class="highlight-icon">↗</span><span><strong>Visualiza</strong><small>Tu evolución académica</small></span></div>
+        <div class="highlight-item"><span class="highlight-icon">◎</span><span><strong>Organiza</strong><small>Tus metas y evaluaciones</small></span></div>
+        <div class="highlight-item"><span class="highlight-icon">✦</span><span><strong>Avanza</strong><small>Con un plan claro</small></span></div>
+      </div>
+      <p class="showcase-footnote">Un paso a la vez. Un objetivo a la vez.</p>
     </div>
-    <div id="impOut" class="card" hidden></div>
-  </div>
-</main>
 
-<div id="toast"></div>
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
-<script src="app.js"></script>
+    <div class="auth-side">
+      <div class="auth-card surface-card">
+        <div class="auth-card-heading">
+          <span class="mobile-brand brand"><span class="brand-mark">E</span><span class="brand-name">elevate<span class="brand-dot">.</span></span></span>
+          <span class="eyebrow">BIENVENIDO DE NUEVO</span>
+          <h2 id="authTitle">Entra a tu espacio</h2>
+          <p>Accede a tu seguimiento académico y continúa construyendo tu progreso.</p>
+        </div>
+        <form id="authForm" class="auth-form" novalidate>
+          <label for="email">Correo electrónico</label>
+          <div class="field-wrap"><span class="field-icon" aria-hidden="true">✉</span><input id="email" type="email" placeholder="nombre@correo.com" autocomplete="email" inputmode="email" required></div>
+          <label for="pass">Contraseña</label>
+          <div class="field-wrap"><span class="field-icon" aria-hidden="true">⌑</span><input id="pass" type="password" placeholder="Mínimo 6 caracteres" autocomplete="current-password" minlength="6" required><button class="password-toggle" type="button" id="togglePass" aria-label="Mostrar contraseña" title="Mostrar contraseña">◉</button></div>
+          <div class="auth-actions">
+            <button id="btnLogin" class="btn btn-primary btn-block" type="button"><span>Iniciar sesión</span><span aria-hidden="true">→</span></button>
+            <button id="btnSignup" class="btn btn-secondary btn-block" type="button">Crear una cuenta</button>
+          </div>
+          <p id="authMsg" class="form-message" role="status" aria-live="polite"></p>
+        </form>
+        <div class="auth-divider"><span>Tu espacio académico</span></div>
+        <p class="auth-note">Tus datos se guardan en tu cuenta. No compartas tu contraseña con nadie.</p>
+      </div>
+      <footer class="auth-footer">© <span id="yearNow">2026</span> Elevate · Diseñado para ayudarte a avanzar.</footer>
+    </div>
+  </section>
+
+  <main id="app" class="app-shell" hidden>
+    <aside class="sidebar" aria-label="Navegación principal">
+      <a class="brand" href="#panel" aria-label="Elevate, panel principal"><span class="brand-mark">E</span><span class="brand-name">elevate<span class="brand-dot">.</span></span></a>
+      <div class="sidebar-label">ESPACIO DE TRABAJO</div>
+      <nav class="main-nav tabs" aria-label="Secciones">
+        <button class="nav-link on" type="button" data-go="panel"><span class="nav-icon">▦</span><span>Panel general</span><span class="nav-indicator"></span></button>
+        <button class="nav-link" type="button" data-go="metas"><span class="nav-icon">◎</span><span>Metas y plan</span><span class="nav-indicator"></span></button>
+        <button class="nav-link" type="button" data-go="calc"><span class="nav-icon">∑</span><span>Calculadora</span><span class="nav-indicator"></span></button>
+        <button class="nav-link" type="button" data-go="importar"><span class="nav-icon">⇧</span><span>Importar de Idukay</span><span class="nav-indicator"></span></button>
+      </nav>
+      <div class="sidebar-bottom">
+        <div class="sidebar-tip"><span class="tip-star">✦</span><strong>Pequeños avances</strong><p>La constancia vale más que la perfección.</p></div>
+        <div class="sidebar-user"><div class="avatar">E</div><div class="sidebar-user-copy"><strong>Mi cuenta</strong><small id="sidebarEmail">Estudiante</small></div><span class="online-dot" aria-label="Sesión activa"></span></div>
+      </div>
+    </aside>
+
+    <section class="workspace">
+      <header class="topbar">
+        <div class="topbar-left"><span class="topbar-context">TU ESPACIO ACADÉMICO</span><span class="topbar-separator">/</span><strong id="topbarSection">Panel general</strong></div>
+        <div class="topbar-actions">
+          <button id="btnTheme" class="icon-button" type="button" aria-label="Cambiar tema" title="Cambiar tema"><span aria-hidden="true">◐</span></button>
+          <div class="account-chip"><div class="avatar avatar-small">E</div><span id="who" class="account-email">Estudiante</span></div>
+          <button id="btnOut" class="btn btn-quiet btn-logout" type="button"><span aria-hidden="true">↪</span> Salir</button>
+        </div>
+      </header>
+
+      <div class="content-area">
+        <section data-view="panel" class="view-section">
+          <div class="page-heading heading-with-control">
+            <div><span class="eyebrow">VISTA GENERAL</span><h1>Tu progreso, <span>en perspectiva.</span></h1><p>Un resumen claro de cómo vas y qué puedes mejorar.</p></div>
+            <label class="term-control" for="termSel"><span>Período</span><select id="termSel"><option value="all">Todo el año</option><option value="1">Trimestre 1</option><option value="2">Trimestre 2</option><option value="3">Trimestre 3</option></select></label>
+          </div>
+
+          <section class="stats-grid" aria-label="Resumen académico">
+            <article class="stat-card stat-primary"><div class="stat-top"><span class="stat-label">Promedio general</span><span class="stat-icon">◈</span></div><div class="stat-value" id="avgAll">–</div><div class="stat-foot">Sobre 10 · según tus materias</div><div class="stat-glow" aria-hidden="true"></div></article>
+            <article class="stat-card"><div class="stat-top"><span class="stat-label">Materias registradas</span><span class="stat-icon">▤</span></div><div class="stat-value" id="countSub">0</div><div class="stat-foot">En tu espacio académico</div></article>
+            <article class="stat-card"><div class="stat-top"><span class="stat-label">Evaluaciones pendientes</span><span class="stat-icon icon-warn">◷</span></div><div class="stat-value" id="countPend">0</div><div class="stat-foot">Por completar o calificar</div></article>
+            <article class="stat-card"><div class="stat-top"><span class="stat-label">Metas activas</span><span class="stat-icon icon-success">✦</span></div><div class="stat-value" id="countGoals">0</div><div class="stat-foot">Objetivos en marcha</div></article>
+            <article class="stat-card stat-change"><div class="stat-top"><span class="stat-label">Cambio en 30 días</span><span class="stat-icon">↗</span></div><div class="stat-value stat-value-sm" id="chg">–</div><div class="stat-foot">Variación del rendimiento</div></article>
+          </section>
+
+          <section class="recommendation-card surface-card"><div class="recommendation-symbol">✦</div><div class="recommendation-copy"><span class="eyebrow">TU SIGUIENTE PASO</span><h2>Una recomendación para ti</h2><p id="tip">Registra tus notas para recibir recomendaciones basadas en tu progreso.</p><small>Se basa en tus notas registradas; no es una predicción.</small></div><div class="recommendation-orbit" aria-hidden="true"></div></section>
+
+          <div class="two-column-grid insight-grid">
+            <section class="surface-card content-card"><div class="section-card-heading"><div><span class="eyebrow">ATENCIÓN</span><h2>Materias para revisar</h2></div><span class="heading-symbol">◎</span></div><ul id="attn" class="insight-list plain"><li class="empty-inline">Aún no hay información.</li></ul></section>
+            <section class="surface-card content-card"><div class="section-card-heading"><div><span class="eyebrow">PRÓXIMAMENTE</span><h2>Próximas evaluaciones</h2></div><span class="heading-symbol">◷</span></div><ul id="upcoming" class="insight-list plain"><li class="empty-inline">No hay evaluaciones próximas.</li></ul></section>
+          </div>
+
+          <div class="section-heading"><div><span class="eyebrow">DATOS Y TENDENCIAS</span><h2>Estadísticas</h2><p>Observa cómo evolucionan tus resultados.</p></div></div>
+          <div class="two-column-grid chart-grid">
+            <section class="surface-card content-card"><div class="section-card-heading"><div><h3>Evolución del promedio</h3><p>Resultados registrados en el tiempo</p></div><span class="chart-badge">%</span></div><p id="chEmpty" class="chart-empty">Registra evaluaciones con nota y fecha para ver tu evolución.</p><div class="chartbox"><canvas id="chEvo" aria-label="Gráfico de evolución del promedio" role="img"></canvas></div></section>
+            <section class="surface-card content-card"><div class="section-card-heading"><div><h3>Promedio por materia</h3><p>Comparación en escala porcentual</p></div><span class="chart-badge">%</span></div><div class="chartbox"><canvas id="chBar" aria-label="Gráfico de promedio por materia" role="img"></canvas></div></section>
+          </div>
+
+          <div class="section-heading section-heading-spaced"><div><span class="eyebrow">ORGANIZA TU INFORMACIÓN</span><h2>Mis materias</h2><p>Administra tus asignaturas y sus escalas de calificación.</p></div></div>
+          <form id="subjForm" class="surface-card form-card">
+            <div class="form-card-heading"><div><h3 id="subjectFormHeading">Agregar materia</h3><p>Configura cómo se calcula su promedio.</p></div><span class="form-heading-icon">＋</span></div>
+            <label class="field-label" for="sName">Nombre de la materia<input id="sName" required maxlength="60" placeholder="Ej. Matemáticas"></label>
+            <label class="field-label" for="sPeriod">Período o nivel<input id="sPeriod" placeholder="Ej. Trimestre 1"></label>
+            <label class="field-label" for="sScale">Escala de calificación<select id="sScale"><option value="10">0 a 10</option><option value="20">0 a 20</option><option value="100">0 a 100</option></select></label>
+            <label class="field-label" for="sSystem">Método de cálculo<select id="sSystem"><option value="">Promedio simple / ponderado</option><option value="ap70">Formativa 70% + Sumativa 30%</option></select></label>
+            <label class="field-label color-field" for="sColor">Color de identificación<input id="sColor" type="color" value="#5b8cff"></label>
+            <div class="form-actions"><button id="sSave" class="btn btn-primary" type="submit">Agregar materia <span aria-hidden="true">＋</span></button><button type="button" id="sCancel" class="btn btn-secondary" hidden>Cancelar</button></div>
+          </form>
+          <div id="subjects" class="subject-grid grid list" aria-live="polite"></div>
+
+          <div class="section-heading section-heading-spaced"><div><span class="eyebrow">REGISTRO ACADÉMICO</span><h2>Calificaciones</h2><p>Guarda tus notas y consulta el historial de evaluaciones.</p></div></div>
+          <form id="assForm" class="surface-card form-card assessment-form">
+            <div class="form-card-heading"><div><h3 id="assessmentFormHeading">Nueva evaluación</h3><p>Deja la nota vacía si todavía está pendiente.</p></div><span class="form-heading-icon">＋</span></div>
+            <label class="field-label" for="aSubject">Materia<select id="aSubject" required></select></label>
+            <label class="field-label" for="aName">Nombre de la evaluación<input id="aName" required maxlength="80" placeholder="Ej. Examen del capítulo 2"></label>
+            <label class="field-label" for="aType">Tipo<select id="aType"><option>formativa</option><option>sumativa</option><option>examen</option><option>prueba corta</option><option>tarea</option><option>proyecto</option><option>otro</option></select></label>
+            <label class="field-label" for="aScore">Calificación<input id="aScore" type="number" step="any" min="0" placeholder="Vacía = pendiente"></label>
+            <label class="field-label" for="aMax">Nota máxima<input id="aMax" type="number" step="any" min="0.01" value="10" required></label>
+            <label class="field-label" for="aWeight">Peso (%) <span class="optional-label">Opcional</span><input id="aWeight" type="number" step="any" min="0" max="100" placeholder="Ej. 20"></label>
+            <label class="field-label" for="aTerm">Trimestre<select id="aTerm"><option value="1">Trimestre 1</option><option value="2">Trimestre 2</option><option value="3">Trimestre 3</option></select></label>
+            <label class="field-label" for="aDate">Fecha de evaluación<input id="aDate" type="date"></label>
+            <div class="form-actions"><button id="aSave" class="btn btn-primary" type="submit">Guardar evaluación <span aria-hidden="true">＋</span></button><button type="button" id="aCancel" class="btn btn-secondary" hidden>Cancelar</button></div>
+          </form>
+          <section class="surface-card table-card"><div class="table-heading"><div><h3>Historial de evaluaciones</h3><p>El listado sigue el filtro de período seleccionado.</p></div><span class="table-count" id="assessmentCount">REGISTRO</span></div><div class="table-scroll wrap"><table><thead><tr><th>Materia</th><th>Evaluación</th><th>Tipo</th><th>Trimestre</th><th>Nota</th><th>Peso</th><th>Fecha</th><th>Acciones</th></tr></thead><tbody id="assessments"><tr><td colspan="8" class="empty-table">Sin evaluaciones todavía.</td></tr></tbody></table></div></section>
+        </section>
+
+        <section data-view="metas" class="view-section" hidden>
+          <div class="page-heading"><span class="eyebrow">OBJETIVOS Y CONSTANCIA</span><h1>Convierte tus metas <span>en avances.</span></h1><p>Define a dónde quieres llegar y crea acciones pequeñas para conseguirlo.</p></div>
+          <section class="surface-card form-card goal-form-card"><div class="form-card-heading"><div><h3>Crear una nueva meta</h3><p>El progreso se actualiza usando tus calificaciones reales.</p></div><span class="form-heading-icon">◎</span></div>
+            <form id="goalForm" class="embedded-form">
+              <label class="field-label" for="gSubject">Materia<select id="gSubject" required></select></label>
+              <label class="field-label" for="gTitle">Nombre de la meta<input id="gTitle" required maxlength="80" placeholder="Ej. Alcanzar 9 en Matemáticas"></label>
+              <label class="field-label" for="gTarget">Promedio objetivo<input id="gTarget" type="number" step="any" min="0" required placeholder="Ej. 9"></label>
+              <label class="field-label" for="gDeadline">Fecha límite<input id="gDeadline" type="date"></label>
+              <div class="form-actions"><button class="btn btn-primary" type="submit">Crear meta <span aria-hidden="true">＋</span></button></div>
+            </form>
+          </section>
+          <div class="info-note"><span>ⓘ</span><p>El punto de partida será tu promedio actual. El avance se calcula con tus notas reales. Para mantener tu promedio, establece un objetivo igual o menor al actual.</p></div>
+          <div class="section-heading"><div><span class="eyebrow">TU PLAN DE PROGRESO</span><h2>Mis metas</h2><p>Consulta el avance y administra las acciones de cada objetivo.</p></div></div>
+          <div id="goals" class="goal-grid grid list"></div>
+        </section>
+
+        <section data-view="calc" class="view-section" hidden>
+          <div class="page-heading"><span class="eyebrow">PLANIFICA CON DATOS</span><h1>Descubre qué nota <span>necesitas.</span></h1><p>Simula el resultado que necesitas para alcanzar tu promedio objetivo.</p></div>
+          <div class="calculator-layout">
+            <section class="surface-card form-card calculator-card"><div class="form-card-heading"><div><h3>Simulador de calificaciones</h3><p>Los resultados son estimaciones basadas en tus registros actuales.</p></div><span class="form-heading-icon">∑</span></div>
+              <form id="calcForm" class="calculator-form">
+                <label class="field-label" for="cSubject">Materia<select id="cSubject"></select></label>
+                <label class="field-label" for="cTarget">Promedio que quiero alcanzar<input id="cTarget" type="number" step="any" min="0" required placeholder="Ej. 9"></label>
+                <label id="cCatWrap" class="field-label" for="cCat" hidden>Categoría que falta<select id="cCat"></select></label>
+                <label id="cPendWrap" class="field-label" for="cPend"><span id="cPendLabel">Evaluaciones que faltan</span><input id="cPend" type="number" step="any" min="0" value="1"></label>
+                <button class="btn btn-primary" type="submit">Calcular nota necesaria <span aria-hidden="true">→</span></button>
+              </form>
+            </section>
+            <section class="calculator-side"><div class="calculator-illustration"><div class="orbit-ring ring-one"></div><div class="orbit-ring ring-two"></div><div class="calculator-symbol">∑</div><span class="float-star star-one">✦</span><span class="float-star star-two">✧</span></div><div class="calculator-side-copy"><h3>Planifica antes de la próxima evaluación.</h3><p>Prueba distintos objetivos para entender qué necesitas y tomar decisiones con más claridad.</p></div></section>
+          </div>
+          <div id="calcOut" class="surface-card calculation-result" hidden aria-live="polite"></div>
+        </section>
+
+        <section data-view="importar" class="view-section" hidden>
+          <div class="page-heading"><span class="eyebrow">IMPORTACIÓN DE DATOS</span><h1>Tus notas de Idukay, <span>en Elevate.</span></h1><p>Transfiere tus actividades sin tener que registrarlas una por una.</p></div>
+          <section class="surface-card import-intro"><div class="import-intro-icon">⇧</div><div><h2>Importación desde Idukay</h2><p>Usa la extensión de Chrome para copiar tus actividades en formato JSON y pégalas aquí para revisarlas antes de importarlas.</p></div></section>
+          <div class="import-steps">
+            <article class="import-step"><span class="step-number">01</span><div><strong>Abre Idukay</strong><p>Inicia sesión en Idukay desde Chrome y deja abierta la pestaña.</p></div></article>
+            <article class="import-step"><span class="step-number">02</span><div><strong>Copia tus actividades</strong><p>Abre la extensión «Elevate · Idukay» y pulsa «Copiar mis notas».</p></div></article>
+            <article class="import-step"><span class="step-number">03</span><div><strong>Revisa e importa</strong><p>Pega el JSON en el campo y revisa los datos antes de confirmar.</p></div></article>
+          </div>
+          <section class="surface-card import-card"><div class="form-card-heading"><div><h3>Preparar importación</h3><p>Configura los períodos antes de revisar los datos.</p></div><span class="form-heading-icon">⌘</span></div>
+            <div class="import-settings">
+              <label class="field-label" for="jFrom">Año escolar desde<input id="jFrom" type="date"></label>
+              <label class="field-label" for="jT1">Fin del trimestre 1<input id="jT1" type="date"></label>
+              <label class="field-label" for="jT2">Fin del trimestre 2<input id="jT2" type="date"></label>
+            </div>
+            <label class="chk import-checkbox" for="jPast"><input type="checkbox" id="jPast"><span>Incluir evaluaciones pendientes con fecha pasada</span></label>
+            <label class="field-label import-text-label" for="impText">JSON copiado desde Idukay<textarea id="impText" rows="8" spellcheck="false" placeholder="Pega aquí el JSON copiado desde la extensión…"></textarea></label>
+            <div class="import-actions"><button id="impPreview" class="btn btn-primary" type="button">Revisar actividades <span aria-hidden="true">→</span></button><span class="import-security-note">La importación no se aplica hasta que la confirmes.</span></div>
+          </section>
+          <div id="impOut" class="surface-card import-result" hidden></div>
+          <section class="import-help"><span class="help-icon">?</span><div><strong>¿No puedes importar?</strong><p>Comprueba que tu sesión de Idukay siga activa, recarga su página y vuelve a generar el JSON. Si aparece un error 403, puede que Idukay haya rechazado la consulta o cambiado su API.</p></div></section>
+        </section>
+
+        <footer class="app-footer"><span>Elevate <span class="brand-dot">.</span></span><span>Tu progreso académico, bajo control.</span></footer>
+      </div>
+    </section>
+  </main>
+
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+  <noscript><div class="noscript-message">Elevate necesita JavaScript activado para funcionar.</div></noscript>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+  <script src="app.js"></script>
 </body>
 </html>

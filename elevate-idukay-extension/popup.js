@@ -14,7 +14,7 @@ const detailsElement = document.getElementById('details');
 
 function setMessage(message, type = '') {
   messageElement.textContent = message;
-  messageElement.className = type;
+  messageElement.className = 'message' + (type ? ` ${type}` : '');
 }
 
 function setBusy(isBusy) {
@@ -135,6 +135,7 @@ async function getActiveIdukayTab() {
 // el navegador utilice la sesión normal de la página mediante credentials: include.
 async function fetchCalendarChunk(startTimestamp, endTimestamp) {
   const path = '/colegios/api/my_academic_calendar';
+  const clientVersion = '12.0.3';
   const requestUrl = new URL(path, window.location.origin);
   requestUrl.searchParams.set('start_date', String(startTimestamp));
   requestUrl.searchParams.set('end_date', String(endTimestamp));
@@ -152,7 +153,7 @@ async function fetchCalendarChunk(startTimestamp, endTimestamp) {
     if (injector) {
       via = 'angular';
       try {
-        const res = await injector.get('$http').get(path, { params: { start_date: startTimestamp, end_date: endTimestamp } });
+        const res = await injector.get('$http').get(path, { params: { start_date: startTimestamp, end_date: endTimestamp }, headers: { clientversion: clientVersion } });
         status = res.status;
         data = res.data;
       } catch (httpError) {
@@ -166,7 +167,7 @@ async function fetchCalendarChunk(startTimestamp, endTimestamp) {
         method: 'GET',
         credentials: 'include',
         cache: 'no-store',
-        headers: { Accept: 'application/json', clientversion: '12.0.3' }
+        headers: { Accept: 'application/json', clientversion: clientVersion }
       });
       status = response.status;
       bodyText = await response.text();
@@ -355,7 +356,7 @@ async function copyMyGrades() {
 
     showExportStats(exportData);
     const warning = failures.length ? ` Ojo: ${failures.length} de ${chunks.length} bloques de fechas fallaron, así que pueden faltar actividades.` : '';
-    setMessage('¡JSON copiado! Ahora pégalo en el importador de Elevo.' + warning, failures.length ? '' : 'success');
+    setMessage('¡JSON copiado! Ahora pégalo en el importador de Elevate.' + warning, failures.length ? '' : 'success');
   } catch (error) {
     setMessage(error instanceof Error ? error.message : 'Ocurrió un error inesperado.', 'error');
     // Con el error, se muestran y se copian los detalles técnicos (la respuesta de Idukay, sin credenciales)
@@ -397,7 +398,7 @@ async function runDiagnostic() {
     const result = await runCalendarRequest(tab.id, start, end);
 
     const diagnostic = {
-      application: 'Elevo',
+      application: 'Elevate',
       diagnosis: 'OK',
       requestUrl: result.requestUrl,
       httpStatus: result.httpStatus,
@@ -419,7 +420,7 @@ async function runDiagnostic() {
     const diagnosticStart = Math.max(diagnosticRange.start, diagnosticCenter - diagnosticHalfWindow);
     const diagnosticEnd = Math.min(diagnosticRange.end, diagnosticCenter + diagnosticHalfWindow);
     const diagnostic = {
-      application: 'Elevo',
+      application: 'Elevate',
       diagnosis: 'ERROR',
       requestUrl: error?.requestUrl || buildRequestUrl(diagnosticStart, diagnosticEnd),
       httpStatus: error?.httpStatus || null,

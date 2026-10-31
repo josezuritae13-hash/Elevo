@@ -1,14 +1,19 @@
 // ===== Configuración: pega aquí los datos de Supabase (Project Settings -> API) =====
 const SUPABASE_URL = "https://kirskefjvqjnngltwwwv.supabase.co";
 const SUPABASE_KEY = "sb_publishable_GbWTpJsqzrSFHEMC283BOw_WRCgBkvQ";
-const db = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+const db = window.supabase?.createClient
+  ? window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY)
+  : null;
 
 const $ = id => document.getElementById(id);
 const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+const safeColor = value => /^#[0-9a-f]{6}$/i.test(String(value || "")) ? value : "#6d9cff";
+const normalizeName = value => String(value ?? "").trim().toLocaleLowerCase("es");
 // Corta a 2 decimales (sin redondear), como Idukay
 const fmt = n => (n === null ? "–" : String(Math.trunc(n * 100 + (n < 0 ? -1e-6 : 1e-6)) / 100));
 const trunc2 = n => Math.trunc(n * 100 + (n < 0 ? -1e-6 : 1e-6)) / 100;
 let subjects = [], allAssessments = [], assessments = [], goals = [], plan = [], editId = null, editSubj = null, termFilter = "all";
+const charts = {};
 
 // ===== Cálculo académico (funciones puras, sin interfaz) =====
 const normalize = (a, scaleMax) => (a.score / a.max_score) * scaleMax;
@@ -51,51 +56,147 @@ function average(list, scaleMax) {
 let tt;
 function toast(msg, err = false) {
   const t = $("toast");
+  if (!t) return;
   t.textContent = msg;
-  t.className = "show" + (err ? " err" : "");
+  t.className = "toast show" + (err ? " err" : "");
   clearTimeout(tt);
-  tt = setTimeout(() => (t.className = ""), 3000);
+  tt = setTimeout(() => (t.className = "toast"), 3600);
 }
 
-// ===== Autenticación (correo y contraseña; luego se cambiará por Microsoft) =====
-const creds = () => ({ email: $("email").value.trim(), password: $("pass").value });
+// ===== Preferencias de interfaz =====
+function applyTheme(theme) {
+  const selected = theme === "light" ? "light" : "dark";
+  document.documentElement.dataset.theme = selected;
+  const button = $("btnTheme");
+  if (button) {
+    button.innerHTML = selected === "dark" ? "<span aria-hidden=\"true\">☼</span>" : "<span aria-hidden=\"true\">◐</span>";
+    button.setAttribute("aria-label", selected === "dark" ? "Cambiar a tema claro" : "Cambiar a tema oscuro");
+    button.title = selected === "dark" ? "Cambiar a tema claro" : "Cambiar a tema oscuro";
+  }
+  try { localStorage.setItem("elevate-theme", selected); } catch (_) { /* El almacenamiento puede estar desactivado. */ }
+  if (subjects.length && typeof Chart !== "undefined") renderInsights();
+}
 
-$("btnLogin").onclick = async () => {
-  const { error } = await db.auth.signInWithPassword(creds());
-  $("authMsg").textContent = error ? error.message : "";
-};
-$("btnSignup").onclick = async () => {
-  const { data, error } = await db.auth.signUp(creds());
-  $("authMsg").textContent = error ? error.message : data.session ? "" : "Revisa tu correo para confirmar la cuenta.";
-};
-$("btnOut").onclick = () => db.auth.signOut();
+$("btnTheme")?.addEventListener("click", () => {
+  const current = document.documentElement.dataset.theme || "dark";
+  applyTheme(current === "dark" ? "light" : "dark");
+});
+applyTheme(document.documentElement.dataset.theme || "dark");
 
-db.auth.onAuthStateChange((_event, session) => {
-  $("auth").hidden = !!session;
-  $("app").hidden = !session;
-  if (session) { $("who").textContent = session.user.email; load(); }
-  else { subjects = []; assessments = []; }
+$("yearNow").textContent = String(new Date().getFullYear());
+$("authForm")?.addEventListener("submit", event => {
+  event.preventDefault();
+  $("btnLogin").click();
+});
+$("togglePass")?.addEventListener("click", () => {
+  const input = $("pass");
+  const visible = input.type === "password";
+  input.type = visible ? "text" : "password";
+  $("togglePass").setAttribute("aria-label", visible ? "Ocultar contraseña" : "Mostrar contraseña");
+  $("togglePass").title = visible ? "Ocultar contraseña" : "Mostrar contraseña";
 });
 
+// ===== Autenticación =====
+const creds = () => ({ email: $("email").value.trim(), password: $("pass").value });
+function setAuthBusy(busy) {
+  $("btnLogin").disabled = busy;
+  $("btnSignup").disabled = busy;
+  $("btnLogin").innerHTML = busy ? "Conectando…" : "<span>Iniciar sesión</span><span aria-hidden=\"true\">→</span>";
+}
+function validateCredentials() {
+  const email = $("email"), pass = $("pass");
+  if (!email.value.trim() || !email.validity.valid) {
+    $("authMsg").textContent = "Escribe un correo electrónico válido.";
+    email.focus();
+    return false;
+  }
+  if (pass.value.length < 6) {
+    $("authMsg").textContent = "La contraseña debe tener al menos 6 caracteres.";
+    pass.focus();
+    return false;
+  }
+  $("authMsg").textContent = "";
+  $("authMsg").classList.remove("success");
+  return true;
+}
+
+if (!db) {
+  $("authMsg").textContent = "No se pudo cargar Supabase. Comprueba tu conexión a internet y recarga la página.";
+  $("btnLogin").disabled = true;
+  $("btnSignup").disabled = true;
+} else {
+  $("btnLogin").onclick = async () => {
+    if (!validateCredentials()) return;
+    setAuthBusy(true);
+    try {
+      const { error } = await db.auth.signInWithPassword(creds());
+      $("authMsg").textContent = error ? error.message : "";
+      $("authMsg").classList.remove("success");
+    } catch (error) {
+      $("authMsg").textContent = error.message || "No se pudo iniciar sesión. Inténtalo de nuevo.";
+      $("authMsg").classList.remove("success");
+    } finally { setAuthBusy(false); }
+  };
+  $("btnSignup").onclick = async () => {
+    if (!validateCredentials()) return;
+    setAuthBusy(true);
+    try {
+      const { data, error } = await db.auth.signUp(creds());
+      $("authMsg").textContent = error ? error.message : data.session ? "Cuenta creada correctamente." : "Revisa tu correo para confirmar la cuenta.";
+      $("authMsg").classList.toggle("success", !error);
+    } catch (error) {
+      $("authMsg").textContent = error.message || "No se pudo crear la cuenta. Inténtalo de nuevo.";
+      $("authMsg").classList.remove("success");
+    } finally { setAuthBusy(false); }
+  };
+  $("btnOut").onclick = async () => {
+    const { error } = await db.auth.signOut();
+    if (error) toast(error.message, true);
+  };
+
+  db.auth.onAuthStateChange((_event, session) => {
+    $("auth").hidden = !!session;
+    $("app").hidden = !session;
+    if (session) {
+      const email = session.user.email || "Estudiante";
+      $("who").textContent = email;
+      $("sidebarEmail").textContent = email;
+      load();
+    } else {
+      subjects = []; allAssessments = []; assessments = []; goals = []; plan = [];
+      Object.values(charts).forEach(chart => chart?.destroy());
+    }
+  });
+}
+
 // ===== Datos =====
+let loadingData = false;
 async function load() {
-  const [s, a, g, p] = await Promise.all([
-    db.from("subjects").select("*").order("created_at"),
-    db.from("assessments").select("*").order("date", { ascending: false, nullsFirst: false }),
-    db.from("goals").select("*").order("created_at", { ascending: false }),
-    db.from("actions").select("*").order("created_at")
-  ]);
-  const err = s.error || a.error || g.error || p.error;
-  if (err) return toast(err.message, true);
-  subjects = s.data;
-  allAssessments = a.data;
-  assessments = termView();
-  goals = g.data;
-  plan = p.data;
-  render();
-  renderInsights();
-  renderGoals();
-  fillCalc();
+  if (!db || loadingData) return;
+  loadingData = true;
+  try {
+    const [s, a, g, p] = await Promise.all([
+      db.from("subjects").select("*").order("created_at"),
+      db.from("assessments").select("*").order("date", { ascending: false, nullsFirst: false }),
+      db.from("goals").select("*").order("created_at", { ascending: false }),
+      db.from("actions").select("*").order("created_at")
+    ]);
+    const err = s.error || a.error || g.error || p.error;
+    if (err) { toast(err.message, true); return; }
+    subjects = s.data || [];
+    allAssessments = a.data || [];
+    assessments = termView();
+    goals = g.data || [];
+    plan = p.data || [];
+    render();
+    renderInsights();
+    renderGoals();
+    fillCalc();
+  } catch (error) {
+    toast(error.message || "No se pudieron cargar tus datos.", true);
+  } finally {
+    loadingData = false;
+  }
 }
 
 function render() {
@@ -111,7 +212,7 @@ function render() {
     const pending = list.filter(a => a.score === null).length;
     const pct = avg === null ? 0 : (avg / s.scale_max) * 100;
     if (avg !== null) pcts.push((trunc2(avg) / s.scale_max) * 10); // como Idukay: cada materia cortada a 2 decimales
-    return `<article class="card subj" style="--c:${esc(s.color)}">
+    return `<article class="card subj" style="--c:${safeColor(s.color)}">
       <strong>${esc(s.name)}</strong>
       <span class="muted">${esc(s.period || "Sin periodo")} · escala 0–${s.scale_max}${s.category_weights ? " · " + Object.entries(s.category_weights).map(([k, v]) => k + " " + v + "%").join(" + ") : ""}</span>
       <div class="big">${fmt(avg)}</div>
@@ -128,7 +229,8 @@ function render() {
     <td>${a.score === null ? "Pendiente" : `${a.score}/${a.max_score}`}</td>
     <td>${a.weight === null ? "–" : a.weight + "%"}</td><td>${esc(a.date || "–")}</td>
     <td><button class="ghost" data-edit-a="${a.id}">Editar</button> <button class="ghost" data-del-a="${a.id}">Eliminar</button></td></tr>`).join("")
-    || `<tr><td colspan="8" class="muted">Sin evaluaciones todavía.</td></tr>`;
+    || `<tr><td colspan="8" class="empty-table">Sin evaluaciones todavía.</td></tr>`;
+  if ($("assessmentCount")) $("assessmentCount").textContent = `${assessments.length} REGISTROS`;
 
   $("avgAll").textContent = pcts.length ? fmt(pcts.reduce((x, y) => x + y, 0) / pcts.length) : "–";
   $("countSub").textContent = subjects.length;
@@ -144,6 +246,7 @@ $("aSubject").onchange = syncMax;
 // ===== Formularios =====
 $("subjForm").onsubmit = async e => {
   e.preventDefault();
+  if (!db) return toast("No hay conexión con el servicio de datos.", true);
   const row = {
     name: $("sName").value.trim(),
     period: $("sPeriod").value.trim() || null,
@@ -155,7 +258,8 @@ $("subjForm").onsubmit = async e => {
   const { error } = editSubj ? await q.update(row).eq("id", editSubj) : await q.insert(row);
   if (error) return toast(error.message, true);
   editSubj = null;
-  $("sSave").textContent = "Agregar materia";
+  $("sSave").innerHTML = "Agregar materia <span aria-hidden=\"true\">＋</span>";
+  $("subjectFormHeading").textContent = "Agregar materia";
   $("sCancel").hidden = true;
   e.target.reset();
   toast("Materia guardada");
@@ -164,9 +268,12 @@ $("subjForm").onsubmit = async e => {
 
 $("assForm").onsubmit = async e => {
   e.preventDefault();
+  if (!db) return toast("No hay conexión con el servicio de datos.", true);
   if (!$("aSubject").value) return toast("Primero crea una materia", true);
   const score = $("aScore").value, max = +$("aMax").value, w = $("aWeight").value;
-  if (score !== "" && +score > max) return toast("La nota no puede superar la nota máxima", true);
+  if (!(max > 0) || !Number.isFinite(max)) return toast("La nota máxima debe ser mayor que cero.", true);
+  if (score !== "" && (+score < 0 || +score > max)) return toast(`La nota debe estar entre 0 y ${max}.`, true);
+  if (w !== "" && (+w < 0 || +w > 100)) return toast("El peso debe estar entre 0 y 100.", true);
   const row = {
     subject_id: $("aSubject").value,
     name: $("aName").value.trim(),
@@ -186,7 +293,8 @@ $("assForm").onsubmit = async e => {
   $("aTerm").value = keepT;
   syncMax();
   editId = null;
-  $("aSave").textContent = "Guardar evaluación";
+  $("aSave").innerHTML = "Guardar evaluación <span aria-hidden=\"true\">＋</span>";
+  $("assessmentFormHeading").textContent = "Nueva evaluación";
   $("aCancel").hidden = true;
   toast("Evaluación guardada");
   load();
@@ -213,10 +321,16 @@ document.addEventListener("click", async e => {
 
 // ===== Pestañas =====
 function showTab(t) {
-  document.querySelectorAll("[data-view]").forEach(s => (s.hidden = s.dataset.view !== t));
-  document.querySelectorAll("[data-go]").forEach(b => b.classList.toggle("on", b.dataset.go === t));
+  const labels = { panel: "Panel general", metas: "Metas y plan", calc: "Calculadora", importar: "Importar de Idukay" };
+  document.querySelectorAll("[data-view]").forEach(section => { section.hidden = section.dataset.view !== t; });
+  document.querySelectorAll("[data-go]").forEach(button => {
+    const active = button.dataset.go === t;
+    button.classList.toggle("on", active);
+    button.setAttribute("aria-current", active ? "page" : "false");
+  });
+  if ($("topbarSection")) $("topbarSection").textContent = labels[t] || "Elevate";
 }
-document.querySelectorAll("[data-go]").forEach(b => (b.onclick = () => showTab(b.dataset.go)));
+document.querySelectorAll("[data-go]").forEach(button => button.addEventListener("click", () => showTab(button.dataset.go)));
 showTab("panel");
 
 // ===== Editar evaluación (sirve también para poner la nota a una pendiente) =====
@@ -233,6 +347,7 @@ function startEdit(id) {
   $("aDate").value = a.date ?? "";
   $("aTerm").value = a.term ?? 1;
   $("aSave").textContent = "Actualizar evaluación";
+  $("assessmentFormHeading").textContent = "Editar evaluación";
   $("aCancel").hidden = false;
   $("assForm").scrollIntoView({ behavior: "smooth" });
 }
@@ -279,7 +394,9 @@ $("calcForm").onsubmit = e => {
   const s = subjects.find(x => x.id === $("cSubject").value);
   if (!s) return toast("Primero crea una materia", true);
   const t = +$("cTarget").value, p = +$("cPend").value, max = s.scale_max;
+  if (!Number.isFinite(t) || t < 0 || t > max) return toast(`El objetivo debe estar entre 0 y ${max}.`, true);
   if (!s.category_weights && !(p > 0)) return toast("Indica cuánto falta por evaluar", true);
+  if (s.category_weights && !$("cCat").value) return toast("Selecciona la categoría que falta.", true);
   const list = assessments.filter(a => a.subject_id === s.id);
   const r = s.category_weights ? neededByCategory(list, s, t) : neededScore(list, max, t, p);
   const pp = r.p ?? p;
@@ -311,7 +428,7 @@ function renderGoals() {
   $("goals").innerHTML = goals.map(g => {
     const s = subjects.find(x => x.id === g.subject_id), pct = Math.round(goalProgress(g));
     const open = g.status === "active" || g.status === "paused";
-    return `<article class="card subj" style="--c:${esc(s?.color || "#4f46e5")}">
+    return `<article class="card subj" style="--c:${safeColor(s?.color)}">
       <div class="row"><strong>${esc(g.title)}</strong><span class="tag">${label[g.status]}</span></div>
       <span class="muted">${esc(s?.name || "Sin materia")} · de ${fmt(g.start_value)} a ${fmt(g.target_value)}${g.deadline ? " · hasta " + esc(g.deadline) : ""}</span>
       <div class="big">${pct}%</div><div class="bar"><i style="width:${pct}%"></i></div>
@@ -328,6 +445,7 @@ function renderGoals() {
 
 $("goalForm").onsubmit = async e => {
   e.preventDefault();
+  if (!db) return toast("No hay conexión con el servicio de datos.", true);
   const sid = $("gSubject").value, cur = currentAvg(sid), target = +$("gTarget").value;
   if (!sid) return toast("Primero crea una materia", true);
   if (cur === null) return toast("Registra al menos una nota en esa materia para fijar el punto de partida", true);
@@ -427,7 +545,6 @@ function evolution(s) {
   return dated.map((a, i) => ({ date: a.date, pct: pctOf(dated.slice(0, i + 1), s) }));
 }
 
-const charts = {};
 function draw(id, cfg) {
   charts[id]?.destroy();
   charts[id] = new Chart($(id), cfg);
@@ -443,7 +560,7 @@ function renderInsights() {
     const reason = r.pct < LOW ? `promedio bajo (${fmt(r.pct)}%)` : down ? "su promedio va bajando" : null;
     return reason && { ...r, reason };
   }).filter(Boolean);
-  $("attn").innerHTML = attn.map(r => `<li><strong style="color:${esc(r.s.color)}">●</strong> ${esc(r.s.name)} · <span class="muted">${esc(r.reason)}</span></li>`).join("")
+  $("attn").innerHTML = attn.map(r => `<li><strong style="color:${safeColor(r.s.color)}">●</strong> ${esc(r.s.name)} · <span class="muted">${esc(r.reason)}</span></li>`).join("")
     || `<li class="muted">${rows.length ? "Ninguna por ahora. ¡Buen trabajo!" : "Aún no hay notas registradas."}</li>`;
 
   const up = assessments.filter(a => a.score === null && a.date && a.date >= localDate(Date.now()))
@@ -464,8 +581,8 @@ function renderInsights() {
 
   if (typeof Chart === "undefined") return;
   const css = getComputedStyle(document.documentElement);
-  Chart.defaults.color = css.getPropertyValue("--mut").trim();
-  Chart.defaults.borderColor = css.getPropertyValue("--bd").trim();
+  Chart.defaults.color = css.getPropertyValue("--muted").trim();
+  Chart.defaults.borderColor = css.getPropertyValue("--border").trim();
 
   const evs = rows.filter(r => r.ev.length);
   $("chEmpty").hidden = evs.length > 0;
@@ -473,7 +590,7 @@ function renderInsights() {
   draw("chEvo", {
     type: "line",
     data: { labels, datasets: evs.map(r => ({
-      label: r.s.name, borderColor: r.s.color, backgroundColor: r.s.color, tension: 0.3, spanGaps: true,
+      label: r.s.name, borderColor: safeColor(r.s.color), backgroundColor: safeColor(r.s.color), tension: 0.3, spanGaps: true,
       data: labels.map(d => { const p = r.ev.filter(q => q.date === d).pop(); return p ? Math.round(p.pct * 10) / 10 : null; })
     })) },
     options: { maintainAspectRatio: false, scales: { y: { min: 0, max: 100 } } }
@@ -481,7 +598,7 @@ function renderInsights() {
   draw("chBar", {
     type: "bar",
     data: { labels: rows.map(r => r.s.name), datasets: [{
-      data: rows.map(r => Math.round(r.pct * 10) / 10), backgroundColor: rows.map(r => r.s.color), borderRadius: 8
+      data: rows.map(r => Math.round(r.pct * 10) / 10), backgroundColor: rows.map(r => safeColor(r.s.color)), borderRadius: 8
     }] },
     options: { maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { y: { min: 0, max: 100 } } }
   });
@@ -523,9 +640,10 @@ function startEditSubject(id) {
   $("sName").value = s.name;
   $("sPeriod").value = s.period ?? "";
   $("sScale").value = String(s.scale_max);
-  $("sColor").value = s.color;
+  $("sColor").value = safeColor(s.color);
   $("sSystem").value = s.category_weights ? "ap70" : "";
   $("sSave").textContent = "Actualizar materia";
+  $("subjectFormHeading").textContent = "Editar materia";
   $("sCancel").hidden = false;
   $("subjForm").scrollIntoView({ behavior: "smooth" });
 }
@@ -533,13 +651,15 @@ function startEditSubject(id) {
 $("sCancel").onclick = () => {
   editSubj = null;
   $("subjForm").reset();
-  $("sSave").textContent = "Agregar materia";
+  $("sSave").innerHTML = "Agregar materia <span aria-hidden=\"true\">＋</span>";
+  $("subjectFormHeading").textContent = "Agregar materia";
   $("sCancel").hidden = true;
 };
 $("aCancel").onclick = () => {
   editId = null;
   $("assForm").reset();
-  $("aSave").textContent = "Guardar evaluación";
+  $("aSave").innerHTML = "Guardar evaluación <span aria-hidden=\"true\">＋</span>";
+  $("assessmentFormHeading").textContent = "Nueva evaluación";
   $("aCancel").hidden = true;
   syncMax();
 };
@@ -623,10 +743,16 @@ function importPlan(text) {
 }
 
 $("impPreview").onclick = () => {
-  const acts = parseJsonImport($("impText").value);
+  const rawImport = $("impText").value.trim();
+  const acts = parseJsonImport(rawImport);
   if (acts) return previewJson(acts);
+  if (rawImport.startsWith("{") || rawImport.startsWith("[")) {
+    $("impOut").hidden = false;
+    $("impOut").innerHTML = "<p class=\"muted\">El contenido parece JSON, pero no tiene un formato válido de Idukay. Vuelve a copiarlo desde la extensión y pégalo completo.</p>";
+    return;
+  }
   lastActs = null;
-  const r = importPlan($("impText").value), out = $("impOut");
+  const r = importPlan(rawImport), out = $("impOut");
   out.hidden = false;
   if (r.error) { pendingImport = []; out.innerHTML = `<p class="muted">${esc(r.error)}</p>`; return; }
   pendingImport = r.plan;
@@ -639,16 +765,17 @@ $("impPreview").onclick = () => {
 };
 
 async function applyImport() {
+  if (!db) return toast("No hay conexión con el servicio de datos.", true);
   const todo = pendingImport.filter(p => p.action !== "omitir"), made = {};
   if (!todo.length) return toast("No hay nada que importar", true);
   for (const p of todo) {
-    let s = p.s || made[p.subject.toLowerCase()];
+    let s = p.s || made[normalizeName(p.subject)];
     if (!s) {
       const res = await db.from("subjects").insert({
         name: p.subject, scale_max: 10, color: PALETTE[Object.keys(made).length % PALETTE.length], category_weights: CATS
       }).select().single();
       if (res.error) return toast(res.error.message, true);
-      s = made[p.subject.toLowerCase()] = res.data;
+      s = made[normalizeName(p.subject)] = res.data;
     } else if (!s.category_weights) {
       const res = await db.from("subjects").update({ category_weights: CATS }).eq("id", s.id);
       if (res.error) return toast(res.error.message, true);
@@ -672,7 +799,6 @@ async function applyImport() {
 }
 
 // ===== Importar actividades desde la extensión (JSON de Idukay) =====
-const CATEGORY_TYPES = ["formativa", "sumativa"];
 const schoolYearStart = () => {
   const d = new Date();
   return `${d.getMonth() >= 7 ? d.getFullYear() : d.getFullYear() - 1}-09-01`;
@@ -685,7 +811,10 @@ let lastActs = null, jsonRows = [];
 function parseJsonImport(text) {
   let data;
   try { data = JSON.parse(text.trim()); } catch (e) { return null; }
-  return data && data.source === "idukay" && Array.isArray(data.activities) ? data.activities : null;
+  if (!data || data.source !== "idukay" || !Array.isArray(data.activities)) return null;
+  return data.activities.filter(item => item && typeof item === "object" && typeof item.subject === "string" && typeof item.title === "string")
+    .map(item => ({ ...item, score: item.score === null || item.score === undefined || item.score === "" ? null : Number(item.score) }))
+    .filter(item => item.score === null || Number.isFinite(item.score));
 }
 
 // La extensión no informa si una actividad es formativa o sumativa: se adivina y se puede corregir en la tabla
@@ -697,14 +826,30 @@ function guessType(a) {
 }
 
 function planJson(acts) {
-  const from = $("jFrom").value || "0000", t1 = $("jT1").value, t2 = $("jT2").value, past = $("jPast").checked;
+  const uniqueActivities = new Map();
+  for (const item of acts) {
+    const stableKey = [normalizeName(item.subject), normalizeName(item.title), item.date || "sin-fecha"].join("|");
+    uniqueActivities.set(stableKey, item);
+  }
+  const normalizedActivities = [...uniqueActivities.values()];
+  const from = $("jFrom").value || "0000";
+  const t1 = $("jT1").value || "9999-12-31";
+  const t2 = $("jT2").value || "9999-12-31";
+  const past = $("jPast").checked;
   const today = localDate(Date.now());
-  return acts.filter(a => (a.date || "9999") >= from).map(a => {
-    const term = !a.date || a.date <= t1 ? 1 : a.date <= t2 ? 2 : 3;
-    const s = subjects.find(x => x.name.trim().toLowerCase() === a.subject.trim().toLowerCase());
-    const prev = s && allAssessments.find(x => x.subject_id === s.id && x.name.trim().toLowerCase() === a.title.trim().toLowerCase());
-    const pendingPast = a.score === null && a.date && a.date < today;
-    return { ...a, term, s, prev, type: guessType(a), on: !(pendingPast && !past) };
+  return normalizedActivities.filter(a => (a.date || "9999") >= from).map(a => {
+    const subjectName = String(a.subject || "Sin asignatura").trim();
+    const title = String(a.title || "Actividad sin título").trim();
+    const date = typeof a.date === "string" && /^\d{4}-\d{2}-\d{2}$/.test(a.date) ? a.date : null;
+    const term = !date || date <= t1 ? 1 : date <= t2 ? 2 : 3;
+    const s = subjects.find(x => normalizeName(x.name) === normalizeName(subjectName));
+    const candidates = s ? allAssessments.filter(x =>
+      x.subject_id === s.id && (x.term ?? 1) === term && normalizeName(x.name) === normalizeName(title)
+    ) : [];
+    // Primero se busca coincidencia exacta por fecha; solo se usa una coincidencia alternativa si es única.
+    const prev = candidates.find(x => (x.date || null) === date) || (candidates.length === 1 ? candidates[0] : null);
+    const pendingPast = a.score === null && date && date < today;
+    return { ...a, subject: subjectName, title, date, term, s, prev, type: guessType(a), on: !(pendingPast && !past) };
   });
 }
 
@@ -718,7 +863,7 @@ function previewJson(acts) {
     <td>${esc(p.subject)}</td><td>${esc(p.title)}</td><td>${esc(p.date || "–")}</td><td>T${p.term}</td>
     <td>${p.score === null ? "Pendiente" : fmt(p.score)}</td>
     <td><select data-jtype="${i}"><option${p.type === "formativa" ? " selected" : ""}>formativa</option><option${p.type === "sumativa" ? " selected" : ""}>sumativa</option></select></td>
-    <td>${p.prev ? (p.prev.score === p.score ? "ya existe" : "actualizar nota") : "crear"}</td></tr>`).join("");
+    <td>${p.prev ? (p.prev.score === p.score && p.prev.type === p.type ? "ya existe" : "actualizar") : "crear"}</td></tr>`).join("");
   out.innerHTML = `<p class="muted">${jsonRows.length} actividades desde el ${esc($("jFrom").value)}. Revisa el tipo de cada una (formativa o sumativa): la extensión no lo informa y lo adivino por el título.</p>
     <div class="wrap"><table><thead><tr><th></th><th>Materia</th><th>Actividad</th><th>Fecha</th><th>Trim.</th><th>Nota</th><th>Tipo</th><th>Qué pasará</th></tr></thead><tbody>${rows}</tbody></table></div>
     <p class="muted">Las materias importadas usan Formativa 70% + Sumativa 30%. Las actividades que ya tienes se reconocen por el nombre y solo se actualiza su nota. Desmarca las que no quieras traer (por ejemplo, materias con nota en letras).</p>
@@ -734,24 +879,25 @@ $("impOut").addEventListener("change", e => {
 ["jFrom", "jT1", "jT2", "jPast"].forEach(id => $(id).addEventListener("change", () => lastActs && previewJson(lastActs)));
 
 async function applyJson() {
+  if (!db) return toast("No hay conexión con el servicio de datos.", true);
   const todo = jsonRows.filter(p => p.on);
   if (!todo.length) return toast("No hay actividades seleccionadas", true);
   const made = {}, inserts = [], cleaned = new Set();
   let skipped = 0;
   for (const p of todo) {
-    let s = p.s || made[p.subject.toLowerCase()];
+    let s = p.s || made[normalizeName(p.subject)];
     if (!s) {
       const res = await db.from("subjects").insert({
         name: p.subject, scale_max: 10, color: PALETTE[Object.keys(made).length % PALETTE.length], category_weights: CATS
       }).select().single();
       if (res.error) return toast(res.error.message, true);
-      s = made[p.subject.toLowerCase()] = res.data;
+      s = made[normalizeName(p.subject)] = res.data;
     } else if (!s.category_weights) {
       const res = await db.from("subjects").update({ category_weights: CATS }).eq("id", s.id);
       if (res.error) return toast(res.error.message, true);
       s.category_weights = CATS;
     }
-    if (p.score !== null && p.score > s.scale_max) { skipped++; continue; }
+    if (p.score !== null && (p.score < 0 || p.score > s.scale_max)) { skipped++; continue; }
     if (!cleaned.has(s.id)) {
       // al traer actividades, se quitan los promedios "(Idukay)" importados antes para no contarlos dos veces
       cleaned.add(s.id);
@@ -760,10 +906,9 @@ async function applyJson() {
       }
     }
     if (p.prev) {
-      const typeOk = CATEGORY_TYPES.includes(p.prev.type);
-      if (p.prev.score === p.score && typeOk) continue;
-      const patch = { score: p.score };
-      if (!typeOk) patch.type = p.type;
+      if (p.prev.score === p.score && p.prev.type === p.type && (p.prev.date || null) === (p.date || null)) continue;
+      const patch = { score: p.score, date: p.date || p.prev.date || null };
+      if (p.prev.type !== p.type) patch.type = p.type;
       const res = await db.from("assessments").update(patch).eq("id", p.prev.id);
       if (res.error) return toast(res.error.message, true);
     } else {
