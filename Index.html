@@ -80,6 +80,7 @@
         <button class="nav-link on" type="button" data-go="panel"><span class="nav-icon">▦</span><span>Panel general</span><span class="nav-indicator"></span></button>
         <button class="nav-link" type="button" data-go="metas"><span class="nav-icon">◎</span><span>Metas y plan</span><span class="nav-indicator"></span></button>
         <button class="nav-link" type="button" data-go="calc"><span class="nav-icon">∑</span><span>Calculadora</span><span class="nav-indicator"></span></button>
+        <button class="nav-link" type="button" data-go="extension"><span class="nav-icon">▣</span><span>Extensión de Chrome</span><span class="nav-indicator"></span></button>
         <button class="nav-link" type="button" data-go="importar"><span class="nav-icon">⇧</span><span>Importar de Idukay</span><span class="nav-indicator"></span></button>
       </nav>
       <div class="sidebar-bottom">
@@ -207,6 +208,66 @@
           </section>
           <div id="impOut" class="surface-card import-result" hidden></div>
           <section class="import-help"><span class="help-icon">?</span><div><strong>¿No puedes importar?</strong><p>Comprueba que tu sesión de Idukay siga activa, recarga su página y vuelve a generar el JSON. Si aparece un error 403, puede que Idukay haya rechazado la consulta o cambiado su API.</p></div></section>
+        </section>
+
+        <section data-view="extension" class="view-section" hidden>
+          <div class="page-heading">
+            <span class="eyebrow">CONECTA TUS CALIFICACIONES</span>
+            <h1>Elevate para <span>Google Chrome.</span></h1>
+            <p>Instala la extensión para copiar tus actividades de Idukay y llevarlas a Elevate en unos pocos pasos.</p>
+          </div>
+
+          <section class="extension-hero surface-card">
+            <div class="extension-hero-copy">
+              <div class="extension-brandline"><span class="extension-brand-icon" aria-hidden="true">E</span><span> ELEVATE <span class="brand-dot">·</span> IDUKAY</span><span class="extension-version">Versión 0.4.0</span></div>
+              <h2>Tus notas de Idukay, listas para importar.</h2>
+              <p>La extensión obtiene tus actividades desde la pestaña de Idukay que tienes abierta, genera un archivo JSON y lo copia al portapapeles. Tú decides cuándo pegarlo e importarlo.</p>
+              <div class="extension-hero-actions">
+                <a class="btn btn-primary extension-download" href="elevo-idukay-extension.zip" download="elevo-idukay-extension.zip" aria-label="Descargar extensión Elevate para Idukay en formato ZIP">
+                  <span aria-hidden="true">↓</span><span>Descargar extensión <small>ZIP · Chrome · v0.4.0</small></span>
+                </a>
+                <span class="extension-size-note">Descarga gratuita · Instalación manual</span>
+              </div>
+            </div>
+            <div class="extension-hero-art" aria-hidden="true">
+              <div class="extension-orbit extension-orbit-one"></div>
+              <div class="extension-orbit extension-orbit-two"></div>
+              <div class="extension-app-icon">E<span>.</span></div>
+              <div class="extension-art-chip chip-top">IDUKAY</div>
+              <div class="extension-art-chip chip-bottom">JSON <span>✓</span></div>
+            </div>
+          </section>
+
+          <div class="extension-feature-grid" aria-label="Características de la extensión">
+            <article class="extension-feature surface-card"><span class="extension-feature-icon">⇧</span><div><strong>Importación sencilla</strong><p>Copia tus actividades y pégalas en Elevate para revisarlas.</p></div></article>
+            <article class="extension-feature surface-card"><span class="extension-feature-icon">⌁</span><div><strong>Tu sesión de Idukay</strong><p>Trabaja con la pestaña en la que ya iniciaste sesión.</p></div></article>
+            <article class="extension-feature surface-card"><span class="extension-feature-icon">◇</span><div><strong>Control antes de guardar</strong><p>Revisa la vista previa en Elevate antes de confirmar.</p></div></article>
+          </div>
+
+          <div class="section-heading extension-section-heading" id="extensionInstallSteps"><div><span class="eyebrow">INSTALACIÓN PASO A PASO</span><h2>Cómo instalar la extensión</h2><p>La instalación se hace una sola vez en Google Chrome.</p></div></div>
+          <div class="extension-steps">
+            <article class="extension-step surface-card"><span class="extension-step-number">01</span><div class="extension-step-icon">↓</div><h3>Descarga el archivo</h3><p>Pulsa el botón de descarga de esta página. Se guardará un archivo ZIP en tu computadora.</p><a class="extension-inline-link" href="downloads/Elevate-Idukay-Chrome-Extension.zip" download="Elevate-Idukay-Chrome-Extension.zip">Descargar ZIP <span aria-hidden="true">↗</span></a></article>
+            <article class="extension-step surface-card"><span class="extension-step-number">02</span><div class="extension-step-icon">▧</div><h3>Extrae el ZIP</h3><p>En Windows, abre Descargas, haz clic derecho sobre el ZIP y selecciona «Extraer todo…». No cargues el ZIP directamente en Chrome.</p><span class="extension-step-hint">Debe quedar una carpeta con manifest.json.</span></article>
+            <article class="extension-step surface-card"><span class="extension-step-number">03</span><div class="extension-step-icon">⚙</div><h3>Abre las extensiones</h3><p>En Chrome, escribe <code>chrome://extensions</code> en la barra de direcciones y presiona Enter.</p><span class="extension-step-hint">Activa «Modo de desarrollador».</span></article>
+            <article class="extension-step surface-card"><span class="extension-step-number">04</span><div class="extension-step-icon">＋</div><h3>Carga la carpeta</h3><p>Pulsa «Cargar descomprimida» y selecciona la carpeta que extrajiste, donde se encuentra directamente <code>manifest.json</code>.</p><span class="extension-step-hint">No selecciones el ZIP ni una carpeta exterior vacía.</span></article>
+            <article class="extension-step surface-card"><span class="extension-step-number">05</span><div class="extension-step-icon">↻</div><h3>Recarga Idukay</h3><p>Abre Idukay, inicia sesión y recarga la pestaña después de instalar la extensión para que Chrome la pueda usar.</p><span class="extension-step-hint">Puedes fijar Elevate desde el menú de extensiones.</span></article>
+            <article class="extension-step extension-step-final surface-card"><span class="extension-step-number">06</span><div class="extension-step-icon">✓</div><h3>¡Ya está instalada!</h3><p>Abre el icono de Elevate desde Chrome y pulsa «Copiar mis notas» para generar el JSON.</p><button class="btn btn-secondary" type="button" data-go="importar">Ir a importar notas <span aria-hidden="true">→</span></button></article>
+          </div>
+
+          <section class="extension-usage surface-card">
+            <div class="extension-usage-heading"><span class="eyebrow">DESPUÉS DE INSTALAR</span><h2>Cómo utilizarla</h2><p>El recorrido completo desde Idukay hasta tu panel académico.</p></div>
+            <ol class="extension-usage-list">
+              <li><span>1</span><div><strong>Entra a Idukay</strong><p>Inicia sesión normalmente y deja abierta la pestaña.</p></div></li>
+              <li><span>2</span><div><strong>Abre Elevate · Idukay</strong><p>Selecciona la extensión desde el icono de piezas de Chrome y pulsa «Copiar mis notas».</p></div></li>
+              <li><span>3</span><div><strong>Vuelve a Elevate</strong><p>Entra en «Importar de Idukay» y pega el JSON que se copió al portapapeles.</p></div></li>
+              <li><span>4</span><div><strong>Revisa antes de importar</strong><p>Comprueba materias, nombres, fechas y trimestres. Confirma solo cuando todo esté correcto.</p></div></li>
+            </ol>
+          </section>
+
+          <section class="extension-notice">
+            <span class="extension-notice-icon" aria-hidden="true">i</span>
+            <div><strong>Importante sobre esta instalación</strong><p>Esta descarga instala la extensión localmente mediante el modo de desarrollador de Chrome de escritorio; no es una publicación de Chrome Web Store y no se puede instalar dentro de Chrome para móviles. La extensión necesita una sesión activa de Idukay y depende de la compatibilidad de su plataforma. Si Idukay cambia su API o la versión requerida, la extracción podría dejar de funcionar hasta actualizar la extensión.</p></div>
+          </section>
         </section>
 
         <footer class="app-footer"><span>Elevate <span class="brand-dot">.</span></span><span>Tu progreso académico, bajo control.</span></footer>

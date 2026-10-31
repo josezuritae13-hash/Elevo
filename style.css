@@ -545,3 +545,123 @@ td .ghost { min-height: 27px; margin: 1px 3px 1px 0; }
   font-weight: 700;
 }
 .subj .row > button:not(.ghost):hover, .import-result button:not(.btn):hover { filter: brightness(1.1); }
+/* ==========================================
+   ELEVATE - CHROME EXTENSION
+========================================== */
+
+.extension-hero {
+  position: relative;
+  display: grid;
+  min-height: 310px;
+  grid-template-columns: minmax(0, 1.2fr) minmax(220px, .8fr);
+  gap: 18px;
+  align-items: center;
+  overflow: hidden;
+  margin-bottom: 13px;
+  padding: clamp(22px, 4vw, 38px);
+  background:
+    radial-gradient(ellipse at 88% 45%, rgba(85,119,231,.2), transparent 37%),
+    linear-gradient(115deg, rgba(62,101,191,.12), rgba(113,89,203,.07)),
+    var(--surface);
+}
+
+.extension-hero-copy {
+  position: relative;
+  z-index: 1;
+  min-width: 0;
+}
+
+.extension-brandline {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 9px;
+  margin-bottom: 18px;
+  color: var(--muted);
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 1.2px;
+}
+
+.extension-brand-icon {
+  display: grid;
+  width: 30px;
+  height: 30px;
+  place-items: center;
+  border: 1px solid rgba(175,199,255,.25);
+  border-radius: 10px;
+  color: #fff;
+  background: linear-gradient(145deg,#78aaff,#4779e6 55%,#765ce1);
+  font-family: Manrope,sans-serif;
+  font-size: 16px;
+}
+
+.extension-version {
+  padding: 4px 8px;
+  border: 1px solid var(--border);
+  border-radius: 99px;
+  color: var(--muted-2);
+  background: var(--surface-raised);
+  font-size: 9px;
+}
+
+.extension-hero h2 {
+  max-width: 610px;
+  margin: 0 0 11px;
+  color: var(--text-strong);
+  font-family: Manrope,sans-serif;
+  font-size: clamp(23px,3vw,34px);
+  font-weight: 800;
+  letter-spacing: -1.2px;
+  line-height: 1.17;
+}
+
+.extension-hero-copy > p {
+  max-width: 650px;
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.8;
+}
+
+.extension-hero-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  margin-top: 23px;
+}
+
+.extension-download {
+  min-height: 55px;
+  justify-content: flex-start;
+  padding: 9px 17px;
+  text-align: left;
+  text-decoration: none;
+}
+
+.extension-download > span:first-child {
+  display: grid;
+  width: 31px;
+  height: 31px;
+  place-items: center;
+  border-radius: 9px;
+  background: rgba(255,255,255,.15);
+  font-size: 20px;
+}
+
+.extension-download > span:nth-child(2) {
+  display: grid;
+  gap: 1px;
+}
+
+.extension-download small {
+  color: rgba(255,255,255,.78);
+  font-size: 9px;
+  font-weight: 500;
+}
+
+.extension-size-note {
+  color: var(--muted-2);
+  font-size: 9px;
+}
