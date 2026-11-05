@@ -1,0 +1,4 @@
+project_id = "elevate"
+
+[functions.elevate-ai]
+verify_jwt = false

@@ -79,6 +79,10 @@
       <nav class="main-nav tabs" aria-label="Secciones">
         <button class="nav-link on" type="button" data-go="panel"><span class="nav-icon">▦</span><span>Panel general</span><span class="nav-indicator"></span></button>
         <button class="nav-link" type="button" data-go="metas"><span class="nav-icon">◎</span><span>Metas y plan</span><span class="nav-indicator"></span></button>
+        <button class="nav-link" type="button" data-go="tareas" data-student-only><span class="nav-icon">✓</span><span>Deberes</span><span class="nav-indicator"></span></button>
+        <button class="nav-link" type="button" data-go="elevate-ai" data-student-only><span class="nav-icon">✦</span><span>Elevate AI</span><span class="nav-indicator"></span></button>
+        <button class="nav-link" type="button" data-go="notificaciones"><span class="nav-icon">◉</span><span>Notificaciones</span><span id="notificationCount" class="nav-count" hidden>0</span><span class="nav-indicator"></span></button>
+        <button class="nav-link" type="button" data-go="docente" data-teacher-only hidden><span class="nav-icon">▤</span><span>Panel docente</span><span class="nav-indicator"></span></button>
         <button class="nav-link" type="button" data-go="calc"><span class="nav-icon">∑</span><span>Calculadora</span><span class="nav-indicator"></span></button>
         <button class="nav-link" type="button" data-go="extension"><span class="nav-icon">▣</span><span>Extensión de Chrome</span><span class="nav-indicator"></span></button>
         <button class="nav-link" type="button" data-go="importar"><span class="nav-icon">⇧</span><span>Importar de Idukay</span><span class="nav-indicator"></span></button>
@@ -115,6 +119,18 @@
           </section>
 
           <section class="recommendation-card surface-card"><div class="recommendation-symbol">✦</div><div class="recommendation-copy"><span class="eyebrow">TU SIGUIENTE PASO</span><h2>Una recomendación para ti</h2><p id="tip">Registra tus notas para recibir recomendaciones basadas en tu progreso.</p><small>Se basa en tus notas registradas; no es una predicción.</small></div><div class="recommendation-orbit" aria-hidden="true"></div></section>
+
+          <section class="surface-card ai-recommendations-card">
+            <div class="section-card-heading"><div><span class="eyebrow">ELEVATE AI</span><h2>Recomendaciones inteligentes</h2><p>Basadas en tus calificaciones, metas y hábitos registrados.</p></div><button id="refreshAiRecommendations" class="ghost" type="button">Actualizar análisis</button></div>
+            <p id="aiRecommendationStatus" class="ai-status" role="status" aria-live="polite">Analizando tu progreso…</p>
+            <div id="aiRecommendationList" class="ai-recommendation-list"></div>
+            <button class="btn btn-secondary" type="button" data-go="elevate-ai">Conversar sobre mi progreso <span aria-hidden="true">→</span></button>
+          </section>
+
+          <div class="two-column-grid learner-extras">
+            <section class="surface-card content-card"><div class="section-card-heading"><div><span class="eyebrow">TENDENCIA</span><h2>Estimación de próximas notas</h2></div><span class="heading-symbol">↗</span></div><ul id="predictions" class="insight-list plain"></ul><p class="muted note-small">Proyección orientativa a partir de tus últimas evaluaciones; no garantiza resultados.</p></section>
+            <section class="surface-card content-card"><div class="section-card-heading"><div><span class="eyebrow">LOGROS</span><h2>Avances que cuentan</h2></div><span class="heading-symbol">✦</span></div><div id="achievements" class="achievement-list"></div></section>
+          </div>
 
           <div class="two-column-grid insight-grid">
             <section class="surface-card content-card"><div class="section-card-heading"><div><span class="eyebrow">ATENCIÓN</span><h2>Materias para revisar</h2></div><span class="heading-symbol">◎</span></div><ul id="attn" class="insight-list plain"><li class="empty-inline">Aún no hay información.</li></ul></section>
@@ -163,9 +179,130 @@
               <label class="field-label" for="gTitle">Nombre de la meta<input id="gTitle" required maxlength="80" placeholder="Ej. Alcanzar 9 en Matemáticas"></label>
               <label class="field-label" for="gTarget">Promedio objetivo<input id="gTarget" type="number" step="any" min="0" required placeholder="Ej. 9"></label>
               <label class="field-label" for="gDeadline">Fecha límite<input id="gDeadline" type="date"></label>
+              <label class="field-label" for="gPeriod">Período de la meta<select id="gPeriod"><option value="term">Académica</option><option value="week">Semanal</option><option value="month">Mensual</option></select></label>
               <div class="form-actions"><button class="btn btn-primary" type="submit">Crear meta <span aria-hidden="true">＋</span></button></div>
             </form>
           </section>
+        </section>
+
+          <section data-view="elevate-ai" class="view-section" data-student-only hidden>
+            <div class="page-heading"><span class="eyebrow">TU TUTOR ACADÉMICO PERSONAL</span><h1>Conoce <span>Elevate AI.</span></h1><p>Haz preguntas sobre tus notas, metas y hábitos. Las respuestas se basan en tus datos registrados.</p></div>
+            <div class="ai-context-card surface-card">
+              <div class="ai-context-icon" aria-hidden="true">✦</div>
+              <div><strong>Tu contexto académico está conectado</strong><p id="aiContextSummary">Al iniciar el chat, Elevate AI consultará tus datos con tu sesión y permisos actuales.</p></div>
+            </div>
+            <div class="ai-chat-layout">
+              <aside class="surface-card ai-history">
+                <button id="newAiConversation" class="btn btn-primary" type="button">＋ Nueva conversación</button>
+                <h2>Conversaciones</h2>
+                <p id="aiHistoryStatus" class="ai-status">Tus conversaciones son privadas.</p>
+                <div id="aiConversationList" class="ai-conversation-list"></div>
+              </aside>
+              <section class="surface-card ai-chat-panel" aria-label="Chat con Elevate AI">
+                <div class="ai-chat-heading"><div class="ai-avatar">E<span>✦</span></div><div><strong>Elevate AI</strong><small>Orientación académica basada en tus datos</small></div><span class="ai-online-dot" aria-label="Asistente disponible"></span></div>
+                <div id="aiMessages" class="ai-messages" aria-live="polite">
+                  <article class="ai-message assistant"><strong>Elevate AI</strong><p>¡Hola! Puedo ayudarte a entender tu progreso y pensar un plan de estudio. Pregúntame sobre tus materias, evaluaciones o metas.</p></article>
+                </div>
+                <div class="ai-suggestions" aria-label="Preguntas sugeridas">
+                  <button class="chip" type="button" data-ai-question="¿En qué materia debería concentrarme más y por qué?">¿En qué materia me concentro?</button>
+                  <button class="chip" type="button" data-ai-question="¿Qué evaluaciones debería priorizar?">¿Qué evaluación priorizo?</button>
+                  <button class="chip" type="button" data-ai-question="¿Cómo voy con mis metas académicas?">¿Cómo voy con mis metas?</button>
+                </div>
+                <p id="aiChatStatus" class="ai-status" role="status" aria-live="polite"></p>
+                <form id="aiChatForm" class="ai-composer">
+                  <label class="sr-only" for="aiPrompt">Mensaje para Elevate AI</label>
+                  <textarea id="aiPrompt" rows="2" maxlength="2000" required placeholder="Pregúntale algo a Elevate AI…"></textarea>
+                  <button id="sendAiMessage" class="btn btn-primary" type="submit"><span>Enviar</span><span aria-hidden="true">↑</span></button>
+                </form>
+                <p class="ai-disclaimer">Elevate AI orienta, pero no garantiza resultados. No compartas información sensible.</p>
+              </section>
+            </div>
+          </section>
+
+          <section data-view="tareas" class="view-section" data-student-only hidden>
+            <div class="page-heading"><span class="eyebrow">ORGANIZA TU SEMANA</span><h1>Deberes y <span>entregas.</span></h1><p>Consulta tus tareas, entrega tu trabajo y revisa las fechas próximas.</p></div>
+            <section class="surface-card form-card join-class-card">
+              <div class="form-card-heading"><div><h3>Unirme a una clase</h3><p>Pide a tu profesor el código de acceso de su clase.</p></div><span class="form-heading-icon">⌂</span></div>
+              <form id="joinClassForm" class="embedded-form">
+                <label class="field-label" for="joinCode">Código de clase<input id="joinCode" required maxlength="12" autocomplete="off" placeholder="Ej. A1B2C3D4"></label>
+                <div class="form-actions"><button class="btn btn-primary" type="submit">Unirme a la clase <span aria-hidden="true">→</span></button></div>
+              </form>
+            </section>
+            <div class="section-heading section-heading-spaced"><div><span class="eyebrow">CALENDARIO ACADÉMICO</span><h2>Próximos deberes</h2><p>Las tareas se ordenan por fecha de entrega.</p></div></div>
+            <div id="studentAssignments" class="assignment-list grid list" aria-live="polite"></div>
+            <section class="surface-card study-card">
+              <div class="section-card-heading"><div><span class="eyebrow">HÁBITOS DE ESTUDIO</span><h2>Registra tu tiempo de estudio</h2></div><span class="tag"><strong id="weeklyStudyMinutes">0</strong>&nbsp;min esta semana</span></div>
+              <form id="studySessionForm" class="study-form">
+                <label class="field-label" for="studySubject">Materia o tema<input id="studySubject" required maxlength="100" placeholder="Ej. Matemáticas"></label>
+                <label class="field-label" for="studyMinutes">Minutos<input id="studyMinutes" type="number" min="5" max="600" step="5" required value="30"></label>
+                <label class="field-label" for="studyDate">Fecha<input id="studyDate" type="date" required></label>
+                <button class="btn btn-primary" type="submit">Guardar sesión</button>
+              </form>
+              <ul id="studySessionsList" class="study-session-list"></ul>
+            </section>
+            <section class="surface-card chat-card">
+              <div class="section-card-heading"><div><span class="eyebrow">COMUNICACIÓN</span><h2>Chat de clase</h2></div><button id="refreshStudentChat" class="ghost" type="button">Actualizar</button></div>
+              <label class="field-label" for="studentChatClass">Clase<select id="studentChatClass"></select></label>
+              <div id="studentChatMessages" class="chat-messages" aria-live="polite"></div>
+              <form id="studentChatForm" class="chat-form"><label class="field-label" for="studentChatText">Mensaje<input id="studentChatText" maxlength="2000" required placeholder="Escribe un mensaje…"></label><button class="btn btn-primary" type="submit">Enviar</button></form>
+            </section>
+          </section>
+
+          <section data-view="notificaciones" class="view-section" hidden>
+            <div class="page-heading"><span class="eyebrow">AVISOS PERSONALIZADOS</span><h1>Recordatorios <span>a tiempo.</span></h1><p>Deberes próximos, metas por cumplir y recomendaciones basadas en tu avance.</p></div>
+            <div class="info-note notification-note"><span>ⓘ</span><p>Los recordatorios se generan dentro de Elevate al abrir la aplicación. El envío por correo no está configurado.</p></div>
+            <div id="notificationsList" class="notification-list grid list" aria-live="polite"></div>
+          </section>
+
+          <section data-view="docente" class="view-section" data-teacher-only hidden>
+            <div class="page-heading"><span class="eyebrow">HERRAMIENTAS DE ENSEÑANZA</span><h1>Panel <span>docente.</span></h1><p>Gestiona tus clases, revisa el avance y acompaña a tus estudiantes.</p></div>
+            <section class="surface-card form-card">
+              <div class="form-card-heading"><div><h3>Crear una clase</h3><p>Comparte el código con tus estudiantes para que puedan inscribirse.</p></div><span class="form-heading-icon">＋</span></div>
+              <form id="classForm" class="embedded-form">
+                <label class="field-label" for="className">Nombre de la clase<input id="className" required maxlength="100" placeholder="Ej. Matemáticas · 10mo A"></label>
+                <div class="form-actions"><button class="btn btn-primary" type="submit">Crear clase</button></div>
+              </form>
+            </section>
+            <section class="surface-card content-card teacher-class-picker">
+              <label class="field-label" for="teacherClass">Clase seleccionada<select id="teacherClass"></select></label>
+              <p id="classJoinCode" class="muted"></p>
+            </section>
+            <section class="stats-grid teacher-stats" aria-label="Resumen de la clase">
+              <article class="stat-card stat-primary"><div class="stat-top"><span class="stat-label">Estudiantes</span><span class="stat-icon">♙</span></div><div class="stat-value" id="teacherStudentCount">0</div><div class="stat-foot">Inscritos en esta clase</div></article>
+              <article class="stat-card"><div class="stat-top"><span class="stat-label">Promedio general</span><span class="stat-icon">◈</span></div><div class="stat-value" id="teacherAverage">–</div><div class="stat-foot">De los reportes compartidos</div></article>
+              <article class="stat-card"><div class="stat-top"><span class="stat-label">Deberes pendientes</span><span class="stat-icon icon-warn">◷</span></div><div class="stat-value" id="teacherPending">0</div><div class="stat-foot">Entregas sin completar</div></article>
+              <article class="stat-card"><div class="stat-top"><span class="stat-label">Asistencia</span><span class="stat-icon icon-success">✓</span></div><div class="stat-value" id="teacherAttendance">–</div><div class="stat-foot">Registros de esta clase</div></article>
+            </section>
+            <div class="section-heading"><div><span class="eyebrow">SEGUIMIENTO</span><h2>Lista de estudiantes</h2><p>El indicador de riesgo se basa en los promedios que cada alumno reporta.</p></div><button id="exportReport" class="btn btn-secondary" type="button">Imprimir / guardar PDF</button></div>
+          <section class="surface-card table-card"><div class="table-scroll"><table><thead><tr><th>Estudiante</th><th>Promedio</th><th>Materias</th><th>Metas activas</th><th>Estudio semanal</th><th>Deberes</th><th>Riesgo</th></tr></thead><tbody id="teacherRoster"><tr><td colspan="7" class="empty-table">Crea o selecciona una clase.</td></tr></tbody></table></div></section>
+            <div class="two-column-grid chart-grid teacher-chart-grid">
+              <section class="surface-card content-card"><div class="section-card-heading"><div><h3>Evolución de notas</h3><p>Promedios reportados por los estudiantes</p></div></div><div class="chartbox"><canvas id="teacherProgressChart" aria-label="Evolución del promedio de estudiantes" role="img"></canvas></div></section>
+              <section class="surface-card content-card"><div class="section-card-heading"><div><h3>Asistencia registrada</h3><p>Asistencia, atrasos y ausencias</p></div></div><div class="chartbox"><canvas id="teacherAttendanceChart" aria-label="Estadísticas de asistencia de la clase" role="img"></canvas></div></section>
+              <section class="surface-card content-card"><div class="section-card-heading"><div><h3>Deberes completados</h3><p>Porcentaje de entregas por estudiante</p></div></div><div class="chartbox"><canvas id="teacherTaskChart" aria-label="Porcentaje de tareas completadas por estudiante" role="img"></canvas></div></section>
+            </div>
+            <section class="surface-card form-card attendance-card">
+              <div class="form-card-heading"><div><h3>Registrar asistencia</h3><p>Marca la asistencia de tus estudiantes para la fecha seleccionada.</p></div><span class="form-heading-icon">✓</span></div>
+              <label class="field-label" for="attendanceDate">Fecha<input id="attendanceDate" type="date"></label>
+              <div id="attendanceRoster" class="attendance-roster"></div>
+            </section>
+            <section class="surface-card form-card assignment-create">
+              <div class="form-card-heading"><div><h3>Publicar un deber</h3><p>La tarea aparecerá a los estudiantes inscritos en esta clase.</p></div><span class="form-heading-icon">＋</span></div>
+              <form id="assignmentForm" class="embedded-form">
+                <label class="field-label" for="assignmentTitle">Título<input id="assignmentTitle" required maxlength="160" placeholder="Ej. Ejercicios del capítulo 4"></label>
+                <label class="field-label" for="assignmentDue">Fecha y hora de entrega<input id="assignmentDue" type="datetime-local" required></label>
+                <label class="field-label" for="assignmentDescription">Instrucciones<textarea id="assignmentDescription" rows="3" maxlength="3000" placeholder="Describe qué deben entregar…"></textarea></label>
+                <div class="form-actions"><button class="btn btn-primary" type="submit">Publicar deber</button></div>
+              </form>
+            </section>
+            <div class="section-heading section-heading-spaced"><div><span class="eyebrow">TAREAS Y ENTREGAS</span><h2>Deberes publicados</h2></div></div>
+            <div id="teacherAssignments" class="assignment-list grid list"></div>
+            <section class="surface-card chat-card">
+              <div class="section-card-heading"><div><span class="eyebrow">COMUNICACIÓN</span><h2>Chat de clase</h2></div><button id="refreshTeacherChat" class="ghost" type="button">Actualizar</button></div>
+              <div id="teacherChatMessages" class="chat-messages" aria-live="polite"></div>
+              <form id="teacherChatForm" class="chat-form"><label class="field-label" for="teacherChatText">Mensaje<input id="teacherChatText" maxlength="2000" required placeholder="Escribe un mensaje para la clase…"></label><button class="btn btn-primary" type="submit">Enviar</button></form>
+            </section>
+          </section>
+        <section data-view="metas" class="view-section" hidden>
           <div class="info-note"><span>ⓘ</span><p>El punto de partida será tu promedio actual. El avance se calcula con tus notas reales. Para mantener tu promedio, establece un objetivo igual o menor al actual.</p></div>
           <div class="section-heading"><div><span class="eyebrow">TU PLAN DE PROGRESO</span><h2>Mis metas</h2><p>Consulta el avance y administra las acciones de cada objetivo.</p></div></div>
           <div id="goals" class="goal-grid grid list"></div>

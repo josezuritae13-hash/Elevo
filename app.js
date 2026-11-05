@@ -9,11 +9,21 @@ const $ = id => document.getElementById(id);
 const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 const safeColor = value => /^#[0-9a-f]{6}$/i.test(String(value || "")) ? value : "#6d9cff";
 const normalizeName = value => String(value ?? "").trim().toLocaleLowerCase("es");
+const localDate = ms => new Date(ms).toLocaleDateString("sv-SE");
 // Corta a 2 decimales (sin redondear), como Idukay
 const fmt = n => (n === null ? "–" : String(Math.trunc(n * 100 + (n < 0 ? -1e-6 : 1e-6)) / 100));
 const trunc2 = n => Math.trunc(n * 100 + (n < 0 ? -1e-6 : 1e-6)) / 100;
 let subjects = [], allAssessments = [], assessments = [], goals = [], plan = [], editId = null, editSubj = null, termFilter = "all";
 const charts = {};
+const accountIsTeacher = email => {
+  const [name, domain, extra] = String(email || "").trim().toLowerCase().split("@");
+  return Boolean(name && domain === "highlandsquito.edu.ec" && extra === undefined && !name.startsWith("est"));
+};
+let currentUser = null, isTeacher = false, teacherClasses = [], selectedClassId = "", classStudents = [],
+  classAssignments = [], classSubmissions = [], classSnapshots = [], classAttendance = [],
+  studentClasses = [], studentAssignments = [], studentSubmissions = [], studySessions = [],
+  notifications = [], selectedStudentChatClass = "";
+let aiConversations = [], aiConversationId = null, aiMessages = [], aiBusy = false, aiWorkspaceLoading = false;
 
 // ===== Cálculo académico (funciones puras, sin interfaz) =====
 const normalize = (a, scaleMax) => (a.score / a.max_score) * scaleMax;
@@ -158,15 +168,42 @@ if (!db) {
     $("auth").hidden = !!session;
     $("app").hidden = !session;
     if (session) {
-      const email = session.user.email || "Estudiante";
+      currentUser = session.user;
+      const email = currentUser.email || "Estudiante";
+      isTeacher = accountIsTeacher(email);
       $("who").textContent = email;
       $("sidebarEmail").textContent = email;
+      setRoleView();
       load();
     } else {
+      currentUser = null;
+      isTeacher = false;
+      teacherClasses = []; selectedClassId = ""; classStudents = []; classAssignments = [];
+      classSubmissions = []; classSnapshots = []; classAttendance = [];
+      studentClasses = []; studentAssignments = []; studentSubmissions = []; notifications = []; selectedStudentChatClass = "";
+      studySessions = [];
+      aiConversations = []; aiConversationId = null; aiMessages = [];
+      $("aiRecommendationList").replaceChildren();
+      $("aiRecommendationStatus").textContent = "";
+      $("aiContextSummary").textContent = "Inicia sesión para consultar tu progreso con Elevate AI.";
+      $("aiConversationList").replaceChildren();
+      $("aiMessages").replaceChildren();
+      $("aiChatStatus").textContent = "";
       subjects = []; allAssessments = []; assessments = []; goals = []; plan = [];
       Object.values(charts).forEach(chart => chart?.destroy());
     }
   });
+}
+
+function setRoleView() {
+  document.querySelectorAll("[data-teacher-only]").forEach(node => { node.hidden = !isTeacher; });
+  document.querySelectorAll("[data-go]").forEach(node => {
+    const studentTab = ["panel", "metas", "tareas", "elevate-ai", "calc", "extension", "importar"].includes(node.dataset.go);
+    node.hidden = isTeacher ? studentTab : node.dataset.go === "docente";
+  });
+  $("sidebarEmail").textContent = `${currentUser?.email || ""} · ${isTeacher ? "Profesor" : "Estudiante"}`;
+  $("who").textContent = `${isTeacher ? "Profesor" : "Estudiante"} · ${currentUser?.email || ""}`;
+  showTab(isTeacher ? "docente" : "panel");
 }
 
 // ===== Datos =====
@@ -175,6 +212,10 @@ async function load() {
   if (!db || loadingData) return;
   loadingData = true;
   try {
+    if (isTeacher) {
+      await loadTeacherWorkspace();
+      return;
+    }
     const [s, a, g, p] = await Promise.all([
       db.from("subjects").select("*").order("created_at"),
       db.from("assessments").select("*").order("date", { ascending: false, nullsFirst: false }),
@@ -192,12 +233,744 @@ async function load() {
     renderInsights();
     renderGoals();
     fillCalc();
+    await loadStudentWorkspace();
+    renderAchievements();
+    renderAIContextSummary();
+    await saveStudentSnapshot();
+    await generateStudentReminders();
+    try {
+      await loadAIRecommendations();
+    } catch (error) {
+      $("aiRecommendationStatus").textContent = `No se pudieron actualizar las recomendaciones de Elevate AI: ${error.message}`;
+      $("aiRecommendationStatus").classList.add("is-error");
+    }
   } catch (error) {
     toast(error.message || "No se pudieron cargar tus datos.", true);
   } finally {
     loadingData = false;
   }
 }
+
+// ===== Elevate AI: recomendaciones y chat con contexto del estudiante =====
+async function invokeElevateAI(body) {
+  const { data, error } = await db.functions.invoke("elevate-ai", { body });
+  if (error) throw new Error(error.message || "No se pudo conectar con Elevate AI.");
+  if (!data || typeof data !== "object") throw new Error("Elevate AI devolvió una respuesta vacía.");
+  if (data.error) throw new Error(String(data.error));
+  return data;
+}
+
+function renderAIContextSummary() {
+  const average = generalPct();
+  const pending = allAssessments.filter(item => item.score === null).length;
+  const activeGoals = goals.filter(item => item.status === "active").length;
+  const tasksDue = studentAssignments.filter(item =>
+    !studentSubmissions.some(submission => submission.assignment_id === item.id && submission.completed)
+  ).length;
+  const pieces = [
+    average === null ? "Aún no hay notas suficientes para calcular un promedio" : `promedio general aproximado de ${fmt(average / 10)}/10`,
+    `${subjects.length} ${subjects.length === 1 ? "materia" : "materias"}`,
+    `${pending} ${pending === 1 ? "evaluación pendiente" : "evaluaciones pendientes"}`,
+    `${activeGoals} ${activeGoals === 1 ? "meta activa" : "metas activas"}`,
+    `${weeklyStudyMinutes()} min de estudio esta semana`,
+    `${tasksDue} ${tasksDue === 1 ? "deber pendiente" : "deberes pendientes"}`
+  ];
+  $("aiContextSummary").textContent = `Contexto actual: ${pieces.join(" · ")}. El chat y las recomendaciones usan estos mismos datos de tu cuenta.`;
+}
+
+function renderAIRecommendations(items) {
+  const container = $("aiRecommendationList");
+  if (!items.length) {
+    container.innerHTML = `<p class="muted">Todavía no hay recomendaciones disponibles.</p>`;
+    return;
+  }
+  container.innerHTML = items.map((item, index) => {
+    const title = esc(item.title || "Siguiente paso");
+    const reason = esc(item.reason || "");
+    const action = esc(item.action || "");
+    const subject = typeof item.subject === "string" && item.subject ? item.subject : "";
+    const question = `Ayúdame a trabajar en esta recomendación: ${item.title}. ${item.action}`;
+    return `<article class="ai-recommendation">
+      <span class="ai-recommendation-index">0${index + 1}</span>
+      <div class="ai-recommendation-copy">
+        <div class="ai-recommendation-title">${subject ? `<span class="tag">${esc(subject)}</span>` : ""}<h3>${title}</h3></div>
+        <p>${reason}</p><p class="ai-action"><strong>Prueba esto:</strong> ${action}</p>
+        <button class="ghost" type="button" data-ai-question="${esc(question)}">Preguntar cómo hacerlo <span aria-hidden="true">→</span></button>
+      </div>
+    </article>`;
+  }).join("");
+}
+
+async function loadAIRecommendations(refresh = false) {
+  const button = $("refreshAiRecommendations");
+  if (button) button.disabled = true;
+  $("aiRecommendationStatus").classList.remove("is-error");
+  $("aiRecommendationStatus").textContent = refresh ? "Actualizando análisis…" : "Analizando tus datos académicos…";
+  try {
+    const data = await invokeElevateAI({ action: "recommendations", refresh });
+    if (!Array.isArray(data.recommendations)) throw new Error("Elevate AI no devolvió recomendaciones en un formato válido.");
+    renderAIRecommendations(data.recommendations);
+    const generated = data.generated_at ? new Date(data.generated_at).toLocaleString("es-EC") : "";
+    $("aiRecommendationStatus").textContent = `${data.cached ? "Análisis actualizado" : "Análisis generado"}${generated ? ` · ${generated}` : ""}. Se renueva cuando cambian tus datos.`;
+  } catch (error) {
+    $("aiRecommendationStatus").classList.add("is-error");
+    throw error;
+  } finally {
+    if (button) button.disabled = false;
+  }
+}
+
+function renderAIConversationList() {
+  $("aiConversationList").innerHTML = aiConversations.map(conversation => `
+    <button class="ai-conversation ${conversation.id === aiConversationId ? "is-current" : ""}" type="button" data-ai-conversation="${conversation.id}" ${aiBusy ? "disabled" : ""}>
+      <strong>${esc(conversation.title || "Conversación")}</strong>
+      <small>${esc(new Date(conversation.updated_at).toLocaleDateString("es-EC"))}</small>
+    </button>`).join("") || `<p class="muted ai-empty-history">Tus conversaciones aparecerán aquí.</p>`;
+}
+
+function renderAIMessages(showTyping = false) {
+  const rows = aiMessages.length ? aiMessages : [{
+    role: "assistant",
+    content: "¡Hola! Puedo ayudarte a entender tu progreso y pensar un plan de estudio. Pregúntame sobre tus materias, evaluaciones o metas."
+  }];
+  $("aiMessages").innerHTML = rows.map(message => `
+    <article class="ai-message ${message.role === "user" ? "user" : "assistant"}">
+      <strong>${message.role === "user" ? "Tú" : "Elevate AI"}</strong>
+      <p>${esc(message.content).replace(/\n/g, "<br>")}</p>
+    </article>`).join("") + (showTyping ? `<article class="ai-message assistant ai-typing" role="status"><strong>Elevate AI</strong><p><span></span><span></span><span></span> Analizando tu pregunta…</p></article>` : "");
+  $("aiMessages").scrollTop = $("aiMessages").scrollHeight;
+}
+
+async function loadAIConversations() {
+  $("aiHistoryStatus").textContent = "Cargando tus conversaciones…";
+  const { data, error } = await db.from("ai_conversations")
+    .select("id,title,updated_at")
+    .order("updated_at", { ascending: false })
+    .limit(40);
+  if (error) throw error;
+  aiConversations = data || [];
+  $("aiHistoryStatus").textContent = "Tus conversaciones son privadas.";
+  renderAIConversationList();
+}
+
+async function loadAIConversation(id) {
+  $("aiChatStatus").textContent = "Cargando conversación…";
+  const { data, error } = await db.from("ai_messages")
+    .select("role,content,created_at")
+    .eq("conversation_id", id)
+    .order("created_at", { ascending: true })
+    .limit(100);
+  if (error) throw error;
+  aiConversationId = id;
+  aiMessages = data || [];
+  renderAIConversationList();
+  renderAIMessages();
+  $("aiChatStatus").textContent = "";
+}
+
+async function openAIWorkspace() {
+  if (aiWorkspaceLoading || aiBusy) return;
+  aiWorkspaceLoading = true;
+  renderAIContextSummary();
+  try {
+    await loadAIConversations();
+    if (aiConversationId && aiConversations.some(item => item.id === aiConversationId)) {
+      await loadAIConversation(aiConversationId);
+    } else {
+      aiConversationId = null;
+      aiMessages = [];
+      renderAIConversationList();
+      renderAIMessages();
+    }
+  } catch (error) {
+    $("aiChatStatus").textContent = `No se pudo cargar el historial: ${error.message}`;
+    $("aiChatStatus").classList.add("is-error");
+  } finally {
+    aiWorkspaceLoading = false;
+  }
+}
+
+function startNewAIConversation() {
+  if (aiBusy) return;
+  aiConversationId = null;
+  aiMessages = [];
+  $("aiChatStatus").textContent = "";
+  $("aiChatStatus").classList.remove("is-error");
+  renderAIConversationList();
+  renderAIMessages();
+  $("aiPrompt").focus();
+}
+
+async function sendAIMessage(message) {
+  if (aiBusy) return;
+  const content = String(message || "").trim();
+  if (!content || content.length > 2000) return;
+  const priorMessages = aiMessages;
+  aiMessages = [...priorMessages, { role: "user", content }];
+  aiBusy = true;
+  $("aiChatStatus").textContent = "";
+  $("aiChatStatus").classList.remove("is-error");
+  $("aiPrompt").disabled = true;
+  $("sendAiMessage").disabled = true;
+  $("newAiConversation").disabled = true;
+  renderAIConversationList();
+  renderAIMessages(true);
+  try {
+    const data = await invokeElevateAI({
+      action: "chat",
+      conversation_id: aiConversationId,
+      message: content
+    });
+    if (typeof data.answer !== "string" || !data.answer.trim() || typeof data.conversation_id !== "string") {
+      throw new Error("Elevate AI devolvió una respuesta incompleta.");
+    }
+    aiConversationId = data.conversation_id;
+    aiMessages = [...aiMessages, { role: "assistant", content: data.answer }];
+    $("aiPrompt").value = "";
+    renderAIMessages();
+    try {
+      await loadAIConversations();
+    } catch (error) {
+      $("aiHistoryStatus").textContent = `La respuesta se guardó, pero no se pudo actualizar el historial: ${error.message}`;
+    }
+  } catch (error) {
+    aiMessages = priorMessages;
+    renderAIMessages();
+    $("aiChatStatus").textContent = `No se pudo obtener una respuesta: ${error.message}`;
+    $("aiChatStatus").classList.add("is-error");
+  } finally {
+    aiBusy = false;
+    $("aiPrompt").disabled = false;
+    $("sendAiMessage").disabled = false;
+    $("newAiConversation").disabled = false;
+    renderAIConversationList();
+    $("aiPrompt").focus();
+  }
+}
+
+// ===== Funciones de clase, deberes, seguimiento y recordatorios =====
+const isoToday = () => localDate(Date.now());
+const formatDue = value => value ? new Date(value).toLocaleString("es-EC", { dateStyle: "medium", timeStyle: "short" }) : "Sin fecha";
+
+async function loadStudentWorkspace() {
+  const [classesRes, assignmentsRes, submissionsRes, sessionsRes, notificationsRes] = await Promise.all([
+    db.from("teacher_classes").select("*").order("created_at"),
+    db.from("class_assignments").select("*").order("due_at"),
+    db.from("assignment_submissions").select("*").eq("student_id", currentUser.id),
+    db.from("study_sessions").select("*").eq("student_id", currentUser.id).gte("study_date", localDate(Date.now() - 30 * 864e5)).order("study_date", { ascending: false }),
+    db.from("student_notifications").select("*").order("created_at", { ascending: false }).limit(50)
+  ]);
+  const error = classesRes.error || assignmentsRes.error || submissionsRes.error || sessionsRes.error || notificationsRes.error;
+  if (error) throw error;
+  studentClasses = classesRes.data || [];
+  studentAssignments = assignmentsRes.data || [];
+  studentSubmissions = submissionsRes.data || [];
+  studySessions = sessionsRes.data || [];
+  notifications = notificationsRes.data || [];
+  renderStudentAssignments();
+  renderStudySessions();
+  renderNotifications();
+  if (!studentClasses.some(item => item.id === selectedStudentChatClass)) selectedStudentChatClass = studentClasses[0]?.id || "";
+  $("studentChatClass").innerHTML = studentClasses.map(item => `<option value="${item.id}">${esc(item.name)}</option>`).join("")
+    || `<option value="">Únete a una clase para iniciar el chat</option>`;
+  $("studentChatClass").value = selectedStudentChatClass;
+  updateTaskRecommendation();
+  await loadClassMessages(selectedStudentChatClass, "studentChatMessages");
+}
+
+function updateTaskRecommendation() {
+  const completed = new Set(studentSubmissions.filter(item => item.completed).map(item => item.assignment_id));
+  const pending = studentAssignments
+    .filter(item => !completed.has(item.id))
+    .sort((a, b) => a.due_at.localeCompare(b.due_at));
+  if (!pending.length) {
+    if (!weeklyStudyMinutes() && $("tip").textContent.startsWith("Vas con buen ritmo")) {
+      $("tip").textContent = "Registra tus sesiones de estudio para descubrir hábitos que te ayudan a progresar.";
+    }
+    return;
+  }
+  const due = new Date(pending[0].due_at).getTime(), now = Date.now();
+  if (due < now) $("tip").textContent = `Prioriza el deber atrasado «${pending[0].title}». Completarlo te ayudará a mantener tu plan académico al día.`;
+  else if (due <= now + 3 * 864e5) $("tip").textContent = `Tu siguiente deber, «${pending[0].title}», vence el ${formatDue(pending[0].due_at)}. Reserva tiempo para terminarlo.`;
+  else if ($("tip").textContent.startsWith("Vas con buen ritmo")) $("tip").textContent = `Avanza con «${pending[0].title}» antes de su fecha de entrega.`;
+}
+
+function weeklyStudyMinutes() {
+  const since = localDate(Date.now() - 6 * 864e5), today = isoToday();
+  return studySessions
+    .filter(item => item.study_date >= since && item.study_date <= today)
+    .reduce((sum, item) => sum + Number(item.duration_minutes), 0);
+}
+
+function renderStudySessions() {
+  $("weeklyStudyMinutes").textContent = String(weeklyStudyMinutes());
+  $("studySessionsList").innerHTML = studySessions.slice(0, 8).map(item =>
+    `<li><span><strong>${esc(item.subject)}</strong> · ${esc(item.study_date)}</span><span>${item.duration_minutes} min</span></li>`
+  ).join("") || `<li class="muted">Aún no registras sesiones de estudio.</li>`;
+}
+
+function renderStudentAssignments() {
+  const byClass = Object.fromEntries(studentClasses.map(item => [item.id, item.name]));
+  const submitted = Object.fromEntries(studentSubmissions.map(item => [item.assignment_id, item]));
+  $("studentAssignments").innerHTML = studentAssignments.map(item => {
+    const submission = submitted[item.id];
+    const due = new Date(item.due_at), late = due < new Date() && !submission?.completed;
+    return `<article class="card assignment-card ${late ? "is-overdue" : ""}">
+      <div class="assignment-card-top"><span class="tag">${esc(byClass[item.class_id] || "Clase")}</span><span class="tag ${late ? "tag-danger" : submission?.completed ? "tag-success" : "tag-warning"}">${late ? "Atrasada" : submission?.completed ? "Entregada" : "Pendiente"}</span></div>
+      <h3>${esc(item.title)}</h3><p class="muted">${esc(item.description || "Sin instrucciones adicionales.")}</p>
+      <p class="assignment-due">Entrega: ${esc(formatDue(item.due_at))}</p>
+      <form class="submission-form" data-assignment="${item.id}">
+        <label class="field-label">Tu entrega<textarea name="response" rows="3" maxlength="5000" placeholder="Escribe tu respuesta o pega un enlace…">${esc(submission?.response || "")}</textarea></label>
+        <label class="chk"><input name="completed" type="checkbox" ${submission?.completed ? "checked" : ""}><span>Marcar como entregada</span></label>
+        <button class="btn btn-primary" type="submit">Guardar entrega</button>
+      </form>
+    </article>`;
+  }).join("") || `<p class="muted">${studentClasses.length ? "Tus profesores todavía no han publicado deberes." : "Únete a una clase para ver los deberes publicados por tus profesores."}</p>`;
+}
+
+function renderNotifications() {
+  const unread = notifications.filter(item => !item.read_at).length;
+  const count = $("notificationCount");
+  count.textContent = unread > 9 ? "9+" : String(unread);
+  count.hidden = unread === 0;
+  $("notificationsList").innerHTML = notifications.map(item => `
+    <article class="notification-card ${item.read_at ? "is-read" : ""}">
+      <div class="notification-symbol" aria-hidden="true">${item.notification_type === "assignment" ? "✓" : item.notification_type === "goal" ? "◎" : "✦"}</div>
+      <div class="notification-copy"><strong>${esc(item.title)}</strong><p>${esc(item.body)}</p><small>${esc(new Date(item.created_at).toLocaleString("es-EC"))}</small></div>
+      ${item.read_at ? "" : `<button class="ghost" type="button" data-read-notification="${item.id}">Marcar leída</button>`}
+    </article>`).join("") || `<p class="muted">No tienes notificaciones por ahora.</p>`;
+}
+
+function renderAchievements() {
+  const completedTasks = studentSubmissions.filter(item => item.completed).length;
+  const badges = [
+    { title: "Primer paso", detail: "Registra una calificación", earned: allAssessments.some(item => item.score !== null), icon: "✦" },
+    { title: "Constancia", detail: "Completa 5 deberes", earned: completedTasks >= 5, icon: "✓" },
+    { title: "Planificador", detail: "Crea una meta académica", earned: goals.length > 0, icon: "◎" },
+    { title: "Meta alcanzada", detail: "Completa una meta", earned: goals.some(item => item.status === "completed"), icon: "◆" }
+  ];
+  $("achievements").innerHTML = badges.map(item => `<div class="achievement ${item.earned ? "earned" : ""}" title="${esc(item.detail)}"><span>${item.icon}</span><strong>${esc(item.title)}</strong></div>`).join("");
+}
+
+async function generateStudentReminders() {
+  const today = isoToday(), now = Date.now(), soon = now + 3 * 864e5;
+  const pending = studentSubmissions.filter(item => !item.completed);
+  const byId = Object.fromEntries(pending.map(item => [item.assignment_id, item]));
+  const reminders = [];
+  for (const assignment of studentAssignments) {
+    if (!byId[assignment.id]) {
+      const due = new Date(assignment.due_at).getTime();
+      if (due < now) reminders.push({
+        notification_type: "assignment", title: "Deber atrasado",
+        body: `Completa «${assignment.title}» cuanto antes.`,
+        dedupe_key: `assignment:overdue:${assignment.id}`
+      });
+      else if (due <= soon) reminders.push({
+        notification_type: "assignment", title: "Deber próximo a vencer",
+        body: `«${assignment.title}» vence el ${formatDue(assignment.due_at)}.`,
+        dedupe_key: `assignment:soon:${assignment.id}`
+      });
+    }
+  }
+  for (const exam of allAssessments.filter(item => item.score === null && item.date && item.date >= today && item.date <= localDate(soon))) {
+    reminders.push({
+      notification_type: "exam", title: "Examen próximo",
+      body: `Reserva tiempo para estudiar: «${exam.name}» es el ${exam.date}.`,
+      dedupe_key: `exam:${exam.id}:${exam.date}`
+    });
+  }
+  for (const goal of goals.filter(item => item.status === "active" && item.deadline && item.deadline <= localDate(soon))) {
+    reminders.push({
+      notification_type: "goal", title: "Revisa tu meta académica",
+      body: `La meta «${goal.title}» vence el ${goal.deadline}.`,
+      dedupe_key: `goal:${goal.id}:${goal.deadline}`
+    });
+  }
+  const recommendation = $("tip").textContent.trim();
+  if (recommendation && !recommendation.startsWith("Registra tu primera nota")) {
+    const key = recommendation.toLocaleLowerCase("es").replace(/[^a-z0-9]+/g, "-").slice(0, 80);
+    reminders.push({
+      notification_type: "recommendation", title: "Tu recomendación de hoy",
+      body: recommendation, dedupe_key: `recommendation:${today}:${key}`
+    });
+  }
+  const activeKeys = new Set(reminders.map(item => item.dedupe_key));
+  const resolvedIds = notifications
+    .filter(item => ["assignment", "exam", "goal"].includes(item.notification_type) && !item.read_at && !activeKeys.has(item.dedupe_key))
+    .map(item => item.id);
+  if (resolvedIds.length) {
+    const { error } = await db.from("student_notifications")
+      .update({ read_at: new Date().toISOString() })
+      .eq("student_id", currentUser.id)
+      .in("id", resolvedIds);
+    if (error) throw error;
+    notifications = notifications.map(item => resolvedIds.includes(item.id) ? { ...item, read_at: new Date().toISOString() } : item);
+    renderNotifications();
+  }
+  if (!reminders.length) return;
+  const { error } = await db.from("student_notifications").upsert(
+    reminders.map(item => ({ ...item, student_id: currentUser.id })),
+    { onConflict: "student_id,dedupe_key", ignoreDuplicates: true }
+  );
+  if (error) throw error;
+  const result = await db.from("student_notifications").select("*").order("created_at", { ascending: false }).limit(50);
+  if (result.error) throw result.error;
+  notifications = result.data || [];
+  renderNotifications();
+}
+
+async function saveStudentSnapshot() {
+  const rows = subjects.map(subject => {
+    const avg = average(allAssessments.filter(item => item.subject_id === subject.id), subject.scale_max);
+    return avg === null ? null : { name: subject.name, average: Math.round(avg * 100) / 100, scale_max: subject.scale_max, average_pct: Math.round(avg / subject.scale_max * 10000) / 100 };
+  }).filter(Boolean);
+  const snapshot = {
+    student_id: currentUser.id,
+    snapshot_date: isoToday(),
+    average_pct: rows.length ? Math.round(rows.reduce((sum, item) => sum + item.average_pct, 0) / rows.length * 100) / 100 : null,
+    subjects: rows,
+    goals: goals.filter(item => item.status === "active").map(item => ({
+      title: item.title, period: item.goal_period || "term", deadline: item.deadline,
+      target_value: item.target_value, subject: subjects.find(subject => subject.id === item.subject_id)?.name || ""
+    })),
+    active_goals: goals.filter(item => item.status === "active").length,
+    completed_assessments: allAssessments.filter(item => item.score !== null).length,
+    pending_assessments: allAssessments.filter(item => item.score === null).length,
+    weekly_study_minutes: weeklyStudyMinutes(),
+    updated_at: new Date().toISOString()
+  };
+  const { error } = await db.from("student_progress").upsert(snapshot, { onConflict: "student_id,snapshot_date" });
+  if (error) throw error;
+}
+
+async function loadTeacherWorkspace() {
+  const classesResult = await db.from("teacher_classes").select("*").eq("teacher_id", currentUser.id).order("created_at");
+  if (classesResult.error) throw classesResult.error;
+  teacherClasses = classesResult.data || [];
+  if (!teacherClasses.some(item => item.id === selectedClassId)) selectedClassId = teacherClasses[0]?.id || "";
+  $("teacherClass").innerHTML = teacherClasses.map(item => `<option value="${item.id}">${esc(item.name)}</option>`).join("")
+    || `<option value="">Crea tu primera clase</option>`;
+  $("teacherClass").value = selectedClassId;
+  const currentClass = teacherClasses.find(item => item.id === selectedClassId);
+  $("classJoinCode").textContent = currentClass ? `Código para tus estudiantes: ${currentClass.join_code}` : "Todavía no tienes clases.";
+  if (!currentClass) {
+    classStudents = []; classAssignments = []; classSubmissions = []; classSnapshots = []; classAttendance = [];
+    renderTeacherWorkspace();
+    await loadClassMessages("", "teacherChatMessages");
+    return;
+  }
+
+  const [enrollmentsRes, assignmentsRes, attendanceRes] = await Promise.all([
+    db.from("class_enrollments").select("student_id").eq("class_id", selectedClassId),
+    db.from("class_assignments").select("*").eq("class_id", selectedClassId).order("due_at"),
+    db.from("class_attendance").select("*").eq("class_id", selectedClassId).order("attendance_date")
+  ]);
+  const error = enrollmentsRes.error || assignmentsRes.error || attendanceRes.error;
+  if (error) throw error;
+  const studentIds = (enrollmentsRes.data || []).map(item => item.student_id);
+  classAssignments = assignmentsRes.data || [];
+  classAttendance = attendanceRes.data || [];
+  if (!studentIds.length) {
+    classStudents = []; classSubmissions = []; classSnapshots = [];
+    renderTeacherWorkspace();
+    await loadClassMessages(selectedClassId, "teacherChatMessages");
+    return;
+  }
+  const [profilesRes, snapshotsRes, submissionsRes] = await Promise.all([
+    db.from("profiles").select("user_id,email").in("user_id", studentIds),
+    db.from("student_progress").select("*").in("student_id", studentIds).order("snapshot_date"),
+    classAssignments.length
+      ? db.from("assignment_submissions").select("*").in("assignment_id", classAssignments.map(item => item.id))
+      : Promise.resolve({ data: [], error: null })
+  ]);
+  const detailError = profilesRes.error || snapshotsRes.error || submissionsRes.error;
+  if (detailError) throw detailError;
+  classStudents = profilesRes.data || [];
+  classSnapshots = snapshotsRes.data || [];
+  classSubmissions = submissionsRes.data || [];
+  renderTeacherWorkspace();
+  await loadClassMessages(selectedClassId, "teacherChatMessages");
+}
+
+async function loadClassMessages(classId, targetId) {
+  const target = $(targetId);
+  if (!classId) {
+    target.innerHTML = `<p class="muted">Selecciona o únete a una clase para ver el chat.</p>`;
+    return;
+  }
+  const { data, error } = await db.from("class_messages").select("*").eq("class_id", classId).order("sent_at", { ascending: false }).limit(100);
+  if (error) throw error;
+  const names = Object.fromEntries(classStudents.map(student => [student.user_id, student.email]));
+  target.innerHTML = (data || []).reverse().map(message => {
+    const sender = message.sender_id === currentUser.id
+      ? "Tú"
+      : names[message.sender_id] || `Miembro · ${message.sender_id.slice(0, 8)}`;
+    return `<article class="chat-message ${message.sender_id === currentUser.id ? "mine" : ""}"><strong>${esc(sender)}</strong><p>${esc(message.body)}</p><small>${esc(new Date(message.sent_at).toLocaleString("es-EC"))}</small></article>`;
+  }).join("") || `<p class="muted">Todavía no hay mensajes. Inicia la conversación.</p>`;
+  target.scrollTop = target.scrollHeight;
+}
+
+async function sendClassMessage(classId, text, form, targetId) {
+  if (!classId) return toast("Selecciona o únete a una clase primero.", true);
+  const { error } = await db.from("class_messages").insert({
+    class_id: classId, sender_id: currentUser.id, body: text.trim()
+  });
+  if (error) return toast(error.message, true);
+  form.reset();
+  try { await loadClassMessages(classId, targetId); } catch (loadError) { toast(loadError.message, true); }
+}
+
+function latestSnapshotFor(studentId) {
+  return classSnapshots.filter(item => item.student_id === studentId).at(-1);
+}
+
+function renderTeacherWorkspace() {
+  $("teacherStudentCount").textContent = String(classStudents.length);
+  const latest = classStudents.map(student => latestSnapshotFor(student.user_id)).filter(item => item?.average_pct !== null && item?.average_pct !== undefined);
+  $("teacherAverage").textContent = latest.length ? `${fmt(latest.reduce((sum, item) => sum + Number(item.average_pct), 0) / latest.length)}%` : "–";
+  $("teacherPending").textContent = String(Math.max(0, classAssignments.length * classStudents.length - classSubmissions.filter(item => item.completed).length));
+  const attendanceCounts = { present: 0, late: 0, absent: 0, excused: 0 };
+  classAttendance.forEach(item => { if (attendanceCounts[item.status] !== undefined) attendanceCounts[item.status]++; });
+  const recorded = attendanceCounts.present + attendanceCounts.late + attendanceCounts.absent;
+  $("teacherAttendance").textContent = recorded ? `${fmt((attendanceCounts.present + attendanceCounts.late) / recorded * 100)}%` : "–";
+  const submissionByStudent = classSubmissions.reduce((groups, item) => {
+    (groups[item.student_id] ||= []).push(item);
+    return groups;
+  }, {});
+  $("teacherRoster").innerHTML = classStudents.map(student => {
+    const snapshot = latestSnapshotFor(student.user_id), average = snapshot?.average_pct;
+    const tasks = submissionByStudent[student.user_id] || [];
+    const completed = tasks.filter(item => item.completed).length;
+    const subjectLine = (snapshot?.subjects || []).map(item => `${item.name}: ${fmt(item.average)}`).join(" · ");
+    const goals = (snapshot?.goals || []).map(item => `${item.title}${item.deadline ? ` (${item.deadline})` : ""}`).join(", ");
+    const risk = average !== null && average !== undefined && Number(average) < LOW;
+    return `<tr>
+      <td>${esc(student.email)}</td><td>${average === null || average === undefined ? "Sin reporte" : `${fmt(average)}%`}</td>
+      <td title="${esc(subjectLine)}">${esc(subjectLine || "–")}</td>
+      <td title="${esc(goals)}">${snapshot?.active_goals ?? 0}${goals ? ` · ${esc(goals)}` : ""}</td>
+      <td>${snapshot?.weekly_study_minutes ?? 0} min</td>
+      <td>${completed}/${classAssignments.length} entregados</td>
+      <td><span class="tag ${risk ? "tag-danger" : "tag-success"}">${risk ? "Requiere apoyo" : average === null || average === undefined ? "Sin datos" : "Al día"}</span></td>
+    </tr>`;
+  }).join("") || `<tr><td colspan="7" class="empty-table">${teacherClasses.length ? "Comparte el código de la clase para que tus estudiantes se inscriban." : "Crea una clase para comenzar."}</td></tr>`;
+  renderTeacherCharts(attendanceCounts);
+  renderAttendanceRoster();
+  renderTeacherAssignments();
+}
+
+function renderTeacherCharts(attendanceCounts) {
+  if (typeof Chart === "undefined") return;
+  const css = getComputedStyle(document.documentElement);
+  Chart.defaults.color = css.getPropertyValue("--muted").trim();
+  Chart.defaults.borderColor = css.getPropertyValue("--border").trim();
+  const palette = ["#6d9cff", "#46d6a0", "#f4bd68", "#9b83ff", "#ff7b89", "#46c7d6"];
+  const dates = [...new Set(classSnapshots.map(item => item.snapshot_date))].sort();
+  draw("teacherProgressChart", {
+    type: "line",
+    data: { labels: dates, datasets: classStudents.map((student, index) => ({
+      label: student.email.split("@")[0],
+      data: dates.map(date => classSnapshots.find(item => item.student_id === student.user_id && item.snapshot_date === date)?.average_pct ?? null),
+      borderColor: palette[index % palette.length], backgroundColor: palette[index % palette.length], tension: .3, spanGaps: true
+    })) },
+    options: { maintainAspectRatio: false, scales: { y: { min: 0, max: 100 } } }
+  });
+  draw("teacherAttendanceChart", {
+    type: "doughnut",
+    data: {
+      labels: ["Presente", "Atraso", "Ausente", "Justificado"],
+      datasets: [{ data: [attendanceCounts.present, attendanceCounts.late, attendanceCounts.absent, attendanceCounts.excused], backgroundColor: ["#46d6a0", "#f4bd68", "#ff7b89", "#6d9cff"] }]
+    },
+    options: { maintainAspectRatio: false }
+  });
+  const completionRate = student => {
+    if (!classAssignments.length) return 0;
+    const done = classSubmissions.filter(item => item.student_id === student.user_id && item.completed).length;
+    return Math.round(done / classAssignments.length * 100);
+  };
+  draw("teacherTaskChart", {
+    type: "bar",
+    data: {
+      labels: classStudents.map(student => student.email.split("@")[0]),
+      datasets: [{ label: "Deberes completados (%)", data: classStudents.map(completionRate), backgroundColor: "#6d9cff", borderRadius: 7 }]
+    },
+    options: { maintainAspectRatio: false, scales: { y: { min: 0, max: 100 } } }
+  });
+}
+
+function renderAttendanceRoster() {
+  const day = $("attendanceDate").value || isoToday();
+  const records = Object.fromEntries(classAttendance.filter(item => item.attendance_date === day).map(item => [item.student_id, item.status]));
+  $("attendanceRoster").innerHTML = classStudents.map(student => `<label class="attendance-row">
+    <span>${esc(student.email)}</span>
+    <select data-attendance-student="${student.user_id}">
+      <option value="">Sin registrar</option>
+      <option value="present" ${records[student.user_id] === "present" ? "selected" : ""}>Presente</option>
+      <option value="late" ${records[student.user_id] === "late" ? "selected" : ""}>Atraso</option>
+      <option value="absent" ${records[student.user_id] === "absent" ? "selected" : ""}>Ausente</option>
+      <option value="excused" ${records[student.user_id] === "excused" ? "selected" : ""}>Justificado</option>
+    </select>
+  </label>`).join("") || `<p class="muted">No hay estudiantes inscritos.</p>`;
+  if (classStudents.length && !$("saveAttendance")) {
+    $("attendanceRoster").insertAdjacentHTML("beforeend", `<button id="saveAttendance" class="btn btn-primary attendance-save" type="button">Guardar asistencia</button>`);
+  }
+}
+
+function renderTeacherAssignments() {
+  $("teacherAssignments").innerHTML = classAssignments.map(item => {
+    const submissions = classSubmissions.filter(submission => submission.assignment_id === item.id);
+    const byId = Object.fromEntries(classStudents.map(student => [student.user_id, student.email]));
+    return `<article class="card assignment-card">
+      <div class="assignment-card-top"><span class="tag">${submissions.filter(submission => submission.completed).length}/${classStudents.length} entregas</span><button class="ghost" type="button" data-delete-assignment="${item.id}">Eliminar</button></div>
+      <h3>${esc(item.title)}</h3><p class="muted">${esc(item.description || "Sin instrucciones adicionales.")}</p><p class="assignment-due">Vence: ${esc(formatDue(item.due_at))}</p>
+      <details class="submission-review"><summary>Revisar entregas (${submissions.filter(submission => submission.completed).length})</summary>
+        ${submissions.filter(submission => submission.completed).map(submission => `<p><strong>${esc(byId[submission.student_id] || "Estudiante")}</strong><br>${esc(submission.response || "Marcó la tarea como entregada sin añadir texto.")}</p>`).join("") || `<p class="muted">Todavía no hay entregas.</p>`}
+      </details>
+    </article>`;
+  }).join("") || `<p class="muted">Publica el primer deber de esta clase.</p>`;
+}
+
+$("classForm").addEventListener("submit", async event => {
+  event.preventDefault();
+  const { data, error } = await db.from("teacher_classes").insert({
+    teacher_id: currentUser.id, name: $("className").value.trim()
+  }).select().single();
+  if (error) return toast(error.message, true);
+  selectedClassId = data.id;
+  $("classForm").reset();
+  toast("Clase creada. Comparte el código de acceso.");
+  try { await loadTeacherWorkspace(); } catch (loadError) { toast(loadError.message, true); }
+});
+
+$("teacherClass").addEventListener("change", async event => {
+  selectedClassId = event.target.value;
+  try { await loadTeacherWorkspace(); } catch (error) { toast(error.message, true); }
+});
+
+$("studentChatClass").addEventListener("change", async event => {
+  selectedStudentChatClass = event.target.value;
+  try { await loadClassMessages(selectedStudentChatClass, "studentChatMessages"); } catch (error) { toast(error.message, true); }
+});
+$("studentChatForm").addEventListener("submit", event => {
+  event.preventDefault();
+  sendClassMessage(selectedStudentChatClass, $("studentChatText").value, event.currentTarget, "studentChatMessages");
+});
+$("teacherChatForm").addEventListener("submit", event => {
+  event.preventDefault();
+  sendClassMessage(selectedClassId, $("teacherChatText").value, event.currentTarget, "teacherChatMessages");
+});
+$("refreshStudentChat").addEventListener("click", async () => {
+  try { await loadClassMessages(selectedStudentChatClass, "studentChatMessages"); } catch (error) { toast(error.message, true); }
+});
+$("refreshTeacherChat").addEventListener("click", async () => {
+  try { await loadClassMessages(selectedClassId, "teacherChatMessages"); } catch (error) { toast(error.message, true); }
+});
+
+$("joinClassForm").addEventListener("submit", async event => {
+  event.preventDefault();
+  const { error } = await db.rpc("elevate_join_class", { p_join_code: $("joinCode").value.trim() });
+  if (error) return toast(error.message, true);
+  $("joinClassForm").reset();
+  toast("Te uniste a la clase.");
+  try { await loadStudentWorkspace(); } catch (loadError) { toast(loadError.message, true); }
+});
+
+$("assignmentForm").addEventListener("submit", async event => {
+  event.preventDefault();
+  if (!selectedClassId) return toast("Crea o selecciona una clase primero.", true);
+  const due = new Date($("assignmentDue").value);
+  if (Number.isNaN(due.getTime())) return toast("Selecciona una fecha de entrega válida.", true);
+  const { error } = await db.from("class_assignments").insert({
+    class_id: selectedClassId, teacher_id: currentUser.id,
+    title: $("assignmentTitle").value.trim(),
+    description: $("assignmentDescription").value.trim(),
+    due_at: due.toISOString()
+  });
+  if (error) return toast(error.message, true);
+  $("assignmentForm").reset();
+  toast("Deber publicado.");
+  try { await loadTeacherWorkspace(); } catch (loadError) { toast(loadError.message, true); }
+});
+
+document.addEventListener("submit", async event => {
+  const form = event.target.closest(".submission-form");
+  if (!form) return;
+  event.preventDefault();
+  const completed = form.elements.completed.checked;
+  const { error } = await db.from("assignment_submissions").upsert({
+    assignment_id: form.dataset.assignment,
+    student_id: currentUser.id,
+    response: form.elements.response.value.trim(),
+    completed,
+    submitted_at: completed ? new Date().toISOString() : null,
+    updated_at: new Date().toISOString()
+  }, { onConflict: "assignment_id,student_id" });
+  if (error) return toast(error.message, true);
+  toast(completed ? "Entrega guardada." : "Progreso guardado.");
+  try {
+    await loadStudentWorkspace();
+    updateTaskRecommendation();
+    renderAchievements();
+    await generateStudentReminders();
+  } catch (loadError) { toast(loadError.message, true); }
+});
+
+document.addEventListener("click", async event => {
+  const markRead = event.target.closest("[data-read-notification]")?.dataset.readNotification;
+  const deleteAssignment = event.target.closest("[data-delete-assignment]")?.dataset.deleteAssignment;
+  if (markRead) {
+    const { error } = await db.from("student_notifications").update({ read_at: new Date().toISOString() }).eq("id", markRead);
+    if (error) return toast(error.message, true);
+    notifications = notifications.map(item => item.id === markRead ? { ...item, read_at: new Date().toISOString() } : item);
+    renderNotifications();
+  } else if (deleteAssignment && confirm("¿Eliminar este deber y sus entregas?")) {
+    const { error } = await db.from("class_assignments").delete().eq("id", deleteAssignment);
+    if (error) return toast(error.message, true);
+    try { await loadTeacherWorkspace(); } catch (loadError) { toast(loadError.message, true); }
+  }
+});
+
+$("attendanceDate").value = isoToday();
+$("attendanceDate").addEventListener("change", renderAttendanceRoster);
+$("studyDate").value = isoToday();
+$("studySessionForm").addEventListener("submit", async event => {
+  event.preventDefault();
+  const minutes = Number($("studyMinutes").value);
+  if (!Number.isInteger(minutes) || minutes < 5 || minutes > 600) return toast("La duración debe estar entre 5 y 600 minutos.", true);
+  const { error } = await db.from("study_sessions").insert({
+    student_id: currentUser.id,
+    subject: $("studySubject").value.trim(),
+    duration_minutes: minutes,
+    study_date: $("studyDate").value
+  });
+  if (error) return toast(error.message, true);
+  $("studySessionForm").reset();
+  $("studyMinutes").value = "30";
+  $("studyDate").value = isoToday();
+  toast("Sesión de estudio registrada.");
+  try {
+    await loadStudentWorkspace();
+    updateTaskRecommendation();
+    renderAchievements();
+    await saveStudentSnapshot();
+    await generateStudentReminders();
+  } catch (loadError) { toast(loadError.message, true); }
+});
+document.addEventListener("click", async event => {
+  if (!event.target.closest("#saveAttendance")) return;
+  const rows = [...$("attendanceRoster").querySelectorAll("[data-attendance-student]")];
+  const records = rows.filter(row => row.value).map(row => ({
+    class_id: selectedClassId, student_id: row.dataset.attendanceStudent,
+    attendance_date: $("attendanceDate").value || isoToday(),
+    status: row.value, recorded_by: currentUser.id
+  }));
+  if (!records.length) return toast("Selecciona al menos un estado de asistencia.", true);
+  const { error } = await db.from("class_attendance").upsert(records, { onConflict: "class_id,student_id,attendance_date" });
+  if (error) return toast(error.message, true);
+  toast("Asistencia guardada.");
+  try { await loadTeacherWorkspace(); } catch (loadError) { toast(loadError.message, true); }
+});
+
+$("exportReport").addEventListener("click", () => window.print());
 
 function render() {
   const sel = $("aSubject"), prev = sel.value;
@@ -321,7 +1094,13 @@ document.addEventListener("click", async e => {
 
 // ===== Pestañas =====
 function showTab(t) {
-  const labels = { panel: "Panel general", metas: "Metas y plan", calc: "Calculadora", importar: "Importar de Idukay" };
+  const labels = {
+    panel: "Panel general", metas: "Metas y plan", tareas: "Deberes",
+    "elevate-ai": "Elevate AI", notificaciones: "Notificaciones", docente: "Panel docente", calc: "Calculadora",
+    importar: "Importar de Idukay", extension: "Extensión de Chrome"
+  };
+  if (isTeacher && ["panel", "metas", "tareas", "elevate-ai", "calc", "extension", "importar"].includes(t)) t = "docente";
+  if (!isTeacher && t === "docente") t = "panel";
   document.querySelectorAll("[data-view]").forEach(section => { section.hidden = section.dataset.view !== t; });
   document.querySelectorAll("[data-go]").forEach(button => {
     const active = button.dataset.go === t;
@@ -329,9 +1108,35 @@ function showTab(t) {
     button.setAttribute("aria-current", active ? "page" : "false");
   });
   if ($("topbarSection")) $("topbarSection").textContent = labels[t] || "Elevate";
+  if (t === "elevate-ai" && currentUser) openAIWorkspace();
 }
 document.querySelectorAll("[data-go]").forEach(button => button.addEventListener("click", () => showTab(button.dataset.go)));
 showTab("panel");
+
+$("newAiConversation").addEventListener("click", startNewAIConversation);
+$("aiChatForm").addEventListener("submit", event => {
+  event.preventDefault();
+  sendAIMessage($("aiPrompt").value);
+});
+$("refreshAiRecommendations").addEventListener("click", async () => {
+  try { await loadAIRecommendations(true); }
+  catch (error) { $("aiRecommendationStatus").textContent = `No se pudieron actualizar las recomendaciones: ${error.message}`; }
+});
+document.addEventListener("click", async event => {
+  const conversationId = event.target.closest("[data-ai-conversation]")?.dataset.aiConversation;
+  const question = event.target.closest("[data-ai-question]")?.dataset.aiQuestion;
+  if (conversationId) {
+    try { await loadAIConversation(conversationId); }
+    catch (error) {
+      $("aiChatStatus").textContent = `No se pudo cargar la conversación: ${error.message}`;
+      $("aiChatStatus").classList.add("is-error");
+    }
+  } else if (question) {
+    showTab("elevate-ai");
+    $("aiPrompt").value = question;
+    $("aiPrompt").focus();
+  }
+});
 
 // ===== Editar evaluación (sirve también para poner la nota a una pendiente) =====
 function startEdit(id) {
@@ -430,7 +1235,7 @@ function renderGoals() {
     const open = g.status === "active" || g.status === "paused";
     return `<article class="card subj" style="--c:${safeColor(s?.color)}">
       <div class="row"><strong>${esc(g.title)}</strong><span class="tag">${label[g.status]}</span></div>
-      <span class="muted">${esc(s?.name || "Sin materia")} · de ${fmt(g.start_value)} a ${fmt(g.target_value)}${g.deadline ? " · hasta " + esc(g.deadline) : ""}</span>
+      <span class="muted">${esc(s?.name || "Sin materia")} · ${g.goal_period === "week" ? "meta semanal" : g.goal_period === "month" ? "meta mensual" : "meta académica"} · de ${fmt(g.start_value)} a ${fmt(g.target_value)}${g.deadline ? " · hasta " + esc(g.deadline) : ""}</span>
       <div class="big">${pct}%</div><div class="bar"><i style="width:${pct}%"></i></div>
       <span class="muted">Promedio actual: ${fmt(currentAvg(g.subject_id))}</span>
       ${actionsHtml(g)}
@@ -456,7 +1261,8 @@ $("goalForm").onsubmit = async e => {
     title: $("gTitle").value.trim(),
     start_value: Math.round(cur * 100) / 100,
     target_value: target,
-    deadline: $("gDeadline").value || null
+    deadline: $("gDeadline").value || null,
+    goal_period: $("gPeriod").value
   });
   if (error) return toast(error.message, true);
   e.target.reset();
@@ -526,7 +1332,6 @@ document.addEventListener("submit", e => {
 
 // ===== Panel inteligente y gráficos =====
 const LOW = 60; // % de la escala bajo el cual una materia pide atención
-const localDate = ms => new Date(ms).toLocaleDateString("sv-SE");
 const pctOf = (list, s) => {
   const v = average(list, s.scale_max);
   return v === null ? null : (v / s.scale_max) * 100;
@@ -575,6 +1380,18 @@ function renderInsights() {
   else if (up.length) tip = `Tu próxima evaluación es "${up[0].name}" el ${up[0].date}. Reserva unos días antes para repasar.`;
   else tip = "Vas con buen ritmo. Mantén tus hábitos y registra cada nota para seguir tu avance.";
   $("tip").textContent = tip;
+  const projected = rows.map(row => {
+    const values = row.ev.slice(-5).map(item => item.pct);
+    if (values.length < 2) return null;
+    const meanX = (values.length - 1) / 2;
+    const meanY = values.reduce((sum, value) => sum + value, 0) / values.length;
+    const denominator = values.reduce((sum, _value, index) => sum + (index - meanX) ** 2, 0);
+    const slope = values.reduce((sum, value, index) => sum + (index - meanX) * (value - meanY), 0) / denominator;
+    const nextPct = Math.max(0, Math.min(100, values.at(-1) + slope));
+    return { subject: row.s.name, grade: nextPct / 100 * row.s.scale_max, scale: row.s.scale_max };
+  }).filter(Boolean);
+  $("predictions").innerHTML = projected.map(item => `<li>${esc(item.subject)} · tendencia próxima: <strong>${fmt(item.grade)}/${item.scale}</strong></li>`).join("")
+    || `<li class="muted">Necesitas al menos dos evaluaciones con fecha en una materia.</li>`;
 
   const now = generalPct(), before = generalPct(localDate(Date.now() - 30 * 864e5));
   $("chg").textContent = now !== null && before !== null ? (now >= before ? "+" : "") + fmt(now - before) + " pts" : "–";

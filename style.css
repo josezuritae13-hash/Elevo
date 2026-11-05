@@ -665,3 +665,160 @@ td .ghost { min-height: 27px; margin: 1px 3px 1px 0; }
   color: var(--muted-2);
   font-size: 9px;
 }
+
+/* Classroom, tasks and notification views */
+.nav-count { display: grid; min-width: 20px; height: 20px; flex: 0 0 auto; place-items: center; padding: 0 5px; border-radius: 99px; color: #fff; background: var(--danger); font-size: 9px; font-weight: 800; }
+.teacher-class-picker { margin: 14px 0; padding: 17px 19px; }
+.teacher-class-picker .field-label { display: grid; max-width: 420px; gap: 7px; }
+.teacher-class-picker select, .attendance-row select { min-height: 38px; padding: 7px 10px; border: 1px solid var(--border-strong); border-radius: 9px; color: var(--text); background: var(--surface-raised); }
+.teacher-class-picker p { margin: 10px 0 0; font-size: 11px; }
+.teacher-stats { grid-template-columns: repeat(4, minmax(0, 1fr)); margin-top: 15px; }
+.assignment-list { grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); }
+.assignment-card { min-width: 0; padding: 17px; }
+.assignment-card-top { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.assignment-card h3 { margin: 12px 0 6px; color: var(--text-strong); font-size: 15px; overflow-wrap: anywhere; }
+.assignment-card > p { color: var(--muted); font-size: 11px; line-height: 1.65; overflow-wrap: anywhere; }
+.assignment-card .assignment-due { color: var(--muted-2); font-size: 10px; font-weight: 700; }
+.assignment-card.is-overdue { border-color: color-mix(in srgb, var(--danger) 50%, var(--border)); }
+.tag-danger { color: var(--danger); background: color-mix(in srgb, var(--danger) 10%, var(--surface-raised)); }
+.tag-warning { color: var(--warning); background: color-mix(in srgb, var(--warning) 10%, var(--surface-raised)); }
+.tag-success { color: var(--success); background: color-mix(in srgb, var(--success) 10%, var(--surface-raised)); }
+.submission-form { display: grid; gap: 11px; margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--border); }
+.submission-form textarea, .embedded-form textarea { width: 100%; margin-top: 5px; padding: 10px; resize: vertical; border: 1px solid var(--border-strong); border-radius: 10px; color: var(--text); background: var(--surface-raised); }
+.submission-form .btn { justify-self: start; }
+.submission-review { margin-top: 13px; padding-top: 11px; border-top: 1px solid var(--border); color: var(--muted); font-size: 10px; }
+.submission-review summary { cursor: pointer; color: var(--primary); font-weight: 700; }
+.submission-review p { margin: 9px 0 0; overflow-wrap: anywhere; }
+.notification-note { margin-bottom: 17px; }
+.notification-list { gap: 9px; }
+.notification-card { display: flex; align-items: flex-start; gap: 12px; padding: 15px; border: 1px solid var(--border); border-radius: 13px; background: var(--surface); }
+.notification-card.is-read { opacity: .7; }
+.notification-symbol { display: grid; width: 34px; height: 34px; flex: 0 0 auto; place-items: center; border-radius: 10px; color: var(--primary); background: var(--primary-soft); }
+.notification-copy { min-width: 0; flex: 1; }
+.notification-copy strong { color: var(--text); font-size: 11px; }
+.notification-copy p { margin: 3px 0 5px; color: var(--muted); font-size: 10px; overflow-wrap: anywhere; }
+.notification-copy small { color: var(--muted-2); font-size: 9px; }
+.attendance-card, .assignment-create { margin-top: 16px; }
+.attendance-card > .field-label { display: grid; max-width: 250px; gap: 7px; }
+.attendance-card > .field-label input { min-height: 37px; padding: 6px 9px; border: 1px solid var(--border-strong); border-radius: 9px; color: var(--text); background: var(--surface-raised); }
+.attendance-roster { display: grid; gap: 7px; margin-top: 13px; }
+.attendance-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 9px 11px; border: 1px solid var(--border); border-radius: 9px; color: var(--text); font-size: 10px; }
+.attendance-row span { min-width: 0; overflow-wrap: anywhere; }
+.attendance-row select { min-height: 32px; }
+.attendance-save { justify-self: start; margin-top: 7px; }
+.teacher-chart-grid { margin-top: 15px; }
+.assignment-create .embedded-form textarea { display: block; }
+.assignment-create .embedded-form > label:nth-child(3) { grid-column: 1 / -1; }
+.study-card { display: grid; gap: 14px; margin-top: 16px; padding: 18px; }
+.study-form { display: grid; grid-template-columns: minmax(0, 1fr) 120px 170px auto; gap: 10px; align-items: end; }
+.study-form .btn { min-height: 41px; }
+.study-session-list { display: grid; gap: 7px; margin: 0; padding: 0; list-style: none; }
+.study-session-list li { display: flex; justify-content: space-between; gap: 12px; padding: 9px 11px; border: 1px solid var(--border); border-radius: 9px; color: var(--muted); font-size: 10px; }
+.study-session-list li strong { color: var(--text); }
+.learner-extras { margin: -2px 0 15px; }
+.note-small { margin: 11px 0 0; color: var(--muted-2); font-size: 9px; }
+.achievement-list { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 16px; }
+.achievement { display: grid; min-width: 92px; gap: 4px; justify-items: center; padding: 11px 10px; border: 1px solid var(--border); border-radius: 12px; color: var(--muted-2); background: var(--surface-raised); text-align: center; }
+.achievement > span { display: grid; width: 28px; height: 28px; place-items: center; border-radius: 9px; color: var(--muted-2); background: var(--surface-hover); }
+.achievement strong { font-size: 9px; }
+.achievement.earned { border-color: color-mix(in srgb, var(--success) 40%, var(--border)); color: var(--text); }
+.achievement.earned > span { color: var(--success); background: color-mix(in srgb, var(--success) 12%, var(--surface-raised)); }
+.chat-card { display: grid; gap: 13px; margin-top: 20px; padding: 18px; }
+.chat-card > .field-label { display: grid; max-width: 380px; gap: 6px; }
+.chat-card select, .chat-form input { min-height: 38px; padding: 7px 10px; border: 1px solid var(--border-strong); border-radius: 9px; color: var(--text); background: var(--surface-raised); }
+.chat-messages { display: grid; max-height: 360px; gap: 9px; overflow-y: auto; padding: 10px; border: 1px solid var(--border); border-radius: 12px; background: var(--surface-raised); }
+.chat-message { justify-self: start; max-width: min(85%, 620px); padding: 9px 12px; border: 1px solid var(--border); border-radius: 11px 11px 11px 3px; background: var(--surface); }
+.chat-message.mine { justify-self: end; border-color: color-mix(in srgb, var(--primary) 36%, var(--border)); background: var(--primary-soft); }
+.chat-message strong { color: var(--text); font-size: 10px; }
+.chat-message p { margin: 3px 0; color: var(--text); font-size: 11px; white-space: pre-wrap; overflow-wrap: anywhere; }
+.chat-message small { color: var(--muted-2); font-size: 8px; }
+.chat-form { display: flex; align-items: end; gap: 9px; }
+.chat-form .field-label { display: grid; flex: 1; gap: 5px; }
+.chat-form .btn { flex: 0 0 auto; }
+.sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; clip-path: inset(50%); }
+
+/* Elevate AI */
+.ai-recommendations-card { display: grid; gap: 13px; margin: 0 0 16px; padding: 18px 20px; border-color: color-mix(in srgb, var(--primary) 24%, var(--border)); }
+.ai-recommendations-card > .section-card-heading { align-items: center; }
+.ai-recommendations-card .section-card-heading h2 { margin: 3px 0; color: var(--text); font-size: 15px; }
+.ai-recommendations-card .section-card-heading p { color: var(--muted-2); font-size: 10px; }
+.ai-recommendations-card > .btn { justify-self: start; }
+.ai-status { min-height: 15px; margin: 0; color: var(--muted-2); font-size: 10px; line-height: 1.5; }
+.ai-status.is-error { color: var(--danger); }
+.ai-recommendation-list { display: grid; gap: 9px; }
+.ai-recommendation { display: flex; gap: 12px; padding: 13px; border: 1px solid var(--border); border-radius: 12px; background: var(--surface-raised); }
+.ai-recommendation-index { display: grid; width: 28px; height: 28px; flex: 0 0 auto; place-items: center; border-radius: 9px; color: var(--primary); background: var(--primary-soft); font-size: 10px; font-weight: 800; }
+.ai-recommendation-copy { min-width: 0; }
+.ai-recommendation-title { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.ai-recommendation-title h3 { margin: 0; color: var(--text); font-size: 12px; }
+.ai-recommendation-copy > p { margin: 6px 0 0; color: var(--muted); font-size: 10px; line-height: 1.6; }
+.ai-recommendation-copy > .ai-action { color: var(--text); }
+.ai-recommendation-copy .ghost { margin-top: 8px; }
+.ai-context-card { display: flex; align-items: flex-start; gap: 13px; margin: 0 0 14px; padding: 15px 17px; }
+.ai-context-icon { display: grid; width: 35px; height: 35px; flex: 0 0 auto; place-items: center; border-radius: 11px; color: var(--primary); background: var(--primary-soft); }
+.ai-context-card strong { color: var(--text); font-size: 11px; }
+.ai-context-card p { margin: 4px 0 0; color: var(--muted); font-size: 10px; line-height: 1.65; }
+.ai-chat-layout { display: grid; min-height: 620px; grid-template-columns: minmax(210px, .7fr) minmax(0, 2fr); gap: 14px; align-items: stretch; }
+.ai-history { display: flex; min-width: 0; flex-direction: column; gap: 12px; padding: 15px; }
+.ai-history > .btn { width: 100%; }
+.ai-history h2 { margin: 5px 0 -7px; color: var(--text); font-size: 12px; }
+.ai-conversation-list { display: grid; align-content: start; gap: 6px; overflow-y: auto; }
+.ai-conversation { display: grid; width: 100%; gap: 4px; padding: 10px; border: 1px solid transparent; border-radius: 10px; color: var(--muted); background: transparent; text-align: left; }
+.ai-conversation:hover, .ai-conversation.is-current { border-color: var(--border); color: var(--text); background: var(--surface-raised); }
+.ai-conversation strong { overflow: hidden; font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }
+.ai-conversation small { color: var(--muted-2); font-size: 8px; }
+.ai-empty-history { font-size: 10px; }
+.ai-chat-panel { display: flex; min-width: 0; min-height: 0; flex-direction: column; overflow: hidden; }
+.ai-chat-heading { display: flex; min-height: 66px; align-items: center; gap: 10px; padding: 12px 17px; border-bottom: 1px solid var(--border); }
+.ai-avatar { position: relative; display: grid; width: 38px; height: 38px; flex: 0 0 auto; place-items: center; border-radius: 13px; color: #fff; background: linear-gradient(145deg, #5d95fb, #725fda); font-family: Manrope, sans-serif; font-size: 18px; font-weight: 800; }
+.ai-avatar span { position: absolute; right: -4px; bottom: -3px; display: grid; width: 16px; height: 16px; place-items: center; border: 2px solid var(--surface-solid); border-radius: 50%; color: var(--success); background: var(--surface-solid); font-size: 9px; }
+.ai-chat-heading > div:nth-child(2) { display: grid; flex: 1; gap: 3px; }
+.ai-chat-heading strong { color: var(--text); font-size: 11px; }
+.ai-chat-heading small { color: var(--muted-2); font-size: 9px; }
+.ai-online-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--success); box-shadow: 0 0 0 4px color-mix(in srgb, var(--success) 12%, transparent); }
+.ai-messages { display: flex; min-height: 280px; flex: 1; flex-direction: column; gap: 11px; overflow-y: auto; padding: 17px; scroll-behavior: smooth; }
+.ai-message { width: fit-content; max-width: min(88%, 680px); padding: 10px 12px; border: 1px solid var(--border); border-radius: 13px 13px 13px 4px; background: var(--surface-raised); }
+.ai-message.user { align-self: flex-end; border-color: color-mix(in srgb, var(--primary) 30%, var(--border)); border-radius: 13px 13px 4px 13px; background: var(--primary-soft); }
+.ai-message strong { color: var(--text); font-size: 9px; }
+.ai-message p { margin: 4px 0 0; color: var(--text); font-size: 11px; line-height: 1.65; overflow-wrap: anywhere; }
+.ai-typing p { display: flex; align-items: center; gap: 4px; color: var(--muted); }
+.ai-typing p span { width: 5px; height: 5px; border-radius: 50%; background: var(--primary); animation: ai-bounce .8s infinite alternate; }
+.ai-typing p span:nth-child(2) { animation-delay: .2s; }
+.ai-typing p span:nth-child(3) { animation-delay: .4s; margin-right: 4px; }
+@keyframes ai-bounce { to { transform: translateY(-4px); opacity: .45; } }
+.ai-suggestions { display: flex; gap: 6px; overflow-x: auto; padding: 0 15px 11px; scrollbar-width: thin; }
+.ai-suggestions .chip { flex: 0 0 auto; }
+.ai-chat-panel > .ai-status { padding: 0 15px; }
+.ai-composer { display: flex; align-items: flex-end; gap: 9px; padding: 11px 15px 6px; }
+.ai-composer textarea { min-height: 47px; max-height: 150px; flex: 1; padding: 11px 12px; resize: vertical; border: 1px solid var(--border-strong); border-radius: 12px; outline: none; color: var(--text); background: var(--surface-raised); font-size: 11px; line-height: 1.5; }
+.ai-composer textarea:focus { border-color: var(--primary); box-shadow: 0 0 0 3px var(--primary-soft); }
+.ai-composer .btn { min-height: 42px; }
+.ai-disclaimer { margin: 0; padding: 0 15px 12px; color: var(--muted-2); font-size: 8px; }
+
+@media (max-width: 720px) {
+  .teacher-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .notification-card { flex-wrap: wrap; }
+  .notification-card > .ghost { margin-left: 46px; }
+  .study-form { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .study-form .btn { justify-self: start; }
+  .chat-form { align-items: stretch; flex-direction: column; }
+  .chat-form .btn { align-self: flex-start; }
+  .ai-chat-layout { min-height: 0; grid-template-columns: minmax(0, 1fr); }
+  .ai-history { max-height: 230px; }
+  .ai-conversation-list { max-height: 125px; }
+  .ai-chat-panel { min-height: 560px; }
+  .ai-messages { min-height: 300px; }
+  .ai-recommendations-card > .section-card-heading { align-items: flex-start; flex-direction: column; }
+  .ai-context-card { padding: 13px; }
+}
+
+@media print {
+  body { color: #111; background: #fff; }
+  .ambient, .sidebar, .topbar, .app-footer, .page-heading button, .section-heading > button, .form-card, .attendance-card, .assignment-create, .toast { display: none !important; }
+  .app-shell { display: block; min-height: 0; }
+  .workspace { display: block; }
+  .content-area { padding: 0; }
+  .view-section[hidden] { display: none !important; }
+  .surface-card, .stat-card { color: #111; background: #fff; box-shadow: none; break-inside: avoid; }
+  .teacher-roster, table { font-size: 9pt; }
+}
