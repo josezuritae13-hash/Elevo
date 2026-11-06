@@ -32,7 +32,7 @@ export async function getRecommendations(
     };
   }
 
-  await consumeQuota(session);
+  await consumeQuota(session, false);
   const raw = await callModel(model, [
     {
       role: "system",

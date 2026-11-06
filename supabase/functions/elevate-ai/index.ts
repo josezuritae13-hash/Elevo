@@ -5,12 +5,15 @@
 import { loadModelConfig } from "./modules/ai-provider.ts";
 import { authenticateStudent, loadFunctionConfig } from "./modules/auth.ts";
 import { handleChat } from "./modules/chat.ts";
+import { getQuota } from "./modules/quota.ts";
+import { adminWrite } from "./modules/admin.ts";
 import { buildAcademicContext } from "./modules/context.ts";
 import { corsHeaders, isOriginAllowed, jsonResponse } from "./modules/http.ts";
 import { getRecommendations } from "./modules/recommendations.ts";
-import { HttpError, isRecord } from "./modules/shared.ts";
+import { HttpError, isRecord, selectRows } from "./modules/shared.ts";
 
 const MAX_BODY_CHARS = 12000;
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 Deno.serve(async (request) => {
   if (request.method === "OPTIONS") {
@@ -62,7 +65,7 @@ Deno.serve(async (request) => {
 
     const action = input.action;
 
-    if (action !== "chat" && action !== "recommendations") {
+    if (action !== "chat" && action !== "recommendations" && action !== "quota" && action !== "rename_conversation") {
       throw new HttpError(400, "La acción solicitada no es válida.");
     }
 
@@ -85,6 +88,26 @@ Deno.serve(async (request) => {
 
     const refresh = input.refresh === true;
 
+    if (action === "quota") {
+      return jsonResponse(request, { quota: await getQuota(session) });
+    }
+
+    if (action === "rename_conversation") {
+      const title = typeof input.title === "string" ? input.title.trim() : "";
+      if (!conversationId || !UUID.test(conversationId) || !title || title.length > 100) {
+        throw new HttpError(400, "Indica una conversación válida y un nombre de hasta 100 caracteres.");
+      }
+      const owned = await selectRows<{ id: string }>(session, "ai_conversations", {
+        id: `eq.${conversationId}`, user_id: `eq.${session.userId}`, select: "id", limit: "1"
+      });
+      if (!owned.length) throw new HttpError(404, "No se encontró esa conversación.");
+      await adminWrite(admin, "ai_conversations", {
+        method: "PATCH", query: `?id=eq.${conversationId}&user_id=eq.${session.userId}`,
+        body: JSON.stringify({ title, updated_at: new Date().toISOString() })
+      });
+      return jsonResponse(request, { success: true });
+    }
+
     const model = loadModelConfig();
     const context = await buildAcademicContext(session);
 
@@ -100,13 +123,22 @@ Deno.serve(async (request) => {
       return jsonResponse(request, result);
     }
 
+    const temporaryHistory = Array.isArray(input.history)
+      ? input.history.slice(-12).filter((item): item is Record<string, unknown> =>
+          isRecord(item) && (item.role === "user" || item.role === "assistant") &&
+          typeof item.content === "string" && item.content.length <= 6000
+        ).map(item => ({ role: item.role as "user" | "assistant", content: String(item.content) }))
+      : [];
+
     const result = await handleChat(
       session,
       admin,
       message,
       conversationId,
       context,
-      model
+      model,
+      input.temporary === true,
+      temporaryHistory
     );
 
     return jsonResponse(request, result);

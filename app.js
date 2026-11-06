@@ -113,6 +113,18 @@ function setAuthBusy(busy) {
   $("btnSignup").disabled = busy;
   $("btnLogin").innerHTML = busy ? "Conectando…" : "<span>Iniciar sesión</span><span aria-hidden=\"true\">→</span>";
 }
+function setAuthMessage(message, success = false) {
+  const node = $("authMsg");
+  node.textContent = message;
+  node.classList.toggle("success", success);
+}
+
+function setResendVisible(visible) {
+  const button = $("btnResendVerification");
+  if (button) button.hidden = !visible;
+}
+
+const authRedirectUrl = () => window.location.href.split(/[?#]/)[0];
 function validateCredentials() {
   const email = $("email"), pass = $("pass");
   if (!email.value.trim() || !email.validity.valid) {
@@ -140,29 +152,88 @@ if (!db) {
     setAuthBusy(true);
     try {
       const { error } = await db.auth.signInWithPassword(creds());
-      $("authMsg").textContent = error ? error.message : "";
+
+      if (error) {
+        const unverified = /email not confirmed/i.test(error.message || "");
+
+        setAuthMessage(
+          unverified
+            ? "Tu correo todavía no está verificado. Solicita un nuevo correo."
+            : error.message
+        );
+
+        setResendVisible(unverified);
+      } else {
+        setAuthMessage("");
+        setResendVisible(false);
+      }
       $("authMsg").classList.remove("success");
     } catch (error) {
       $("authMsg").textContent = error.message || "No se pudo iniciar sesión. Inténtalo de nuevo.";
       $("authMsg").classList.remove("success");
     } finally { setAuthBusy(false); }
   };
+
   $("btnSignup").onclick = async () => {
     if (!validateCredentials()) return;
     setAuthBusy(true);
     try {
-      const { data, error } = await db.auth.signUp(creds());
-      $("authMsg").textContent = error ? error.message : data.session ? "Cuenta creada correctamente." : "Revisa tu correo para confirmar la cuenta.";
-      $("authMsg").classList.toggle("success", !error);
+      const { data, error } = await db.auth.signUp({
+        ...creds(),
+        options: { emailRedirectTo: authRedirectUrl() }
+      });
+
+      if (error) {
+        setAuthMessage(error.message);
+        setResendVisible(/already registered|already exists/i.test(error.message || ""));
+      } else if (data.session) {
+        setAuthMessage("Tu cuenta está lista. Ya puedes entrar.", true);
+        setResendVisible(false);
+      } else {
+        setAuthMessage(`Cuenta creada. Enviamos un correo a ${creds().email}. Revisa Recibidos, Spam y Promociones.`, true);
+        setResendVisible(true);
+      }
     } catch (error) {
-      $("authMsg").textContent = error.message || "No se pudo crear la cuenta. Inténtalo de nuevo.";
-      $("authMsg").classList.remove("success");
-    } finally { setAuthBusy(false); }
+      setAuthMessage(error.message || "No se pudo crear la cuenta.");
+    } finally {
+      setAuthBusy(false);
+    }
   };
-  $("btnOut").onclick = async () => {
-    const { error } = await db.auth.signOut();
-    if (error) toast(error.message, true);
-  };
+
+  $("btnResendVerification")?.addEventListener("click", async () => {
+  const email = $("email").value.trim();
+
+  if (!email || !$("email").validity.valid) {
+    setAuthMessage("Escribe tu correo electrónico.");
+    $("email").focus();
+    return;
+  }
+
+  const button = $("btnResendVerification");
+  button.disabled = true;
+  button.textContent = "Enviando...";
+
+  setAuthMessage("Solicitando un nuevo correo de verificación...");
+
+  try {
+    const { error } = await db.auth.resend({
+      type: "signup",
+      email,
+      options: { emailRedirectTo: authRedirectUrl() }
+    });
+
+    if (error) {
+      setAuthMessage(error.message || "No se pudo reenviar el correo.");
+    } else {
+      setAuthMessage("Solicitud aceptada. Revisa tu bandeja de entrada, Spam y Promociones.", true);
+    }
+  } catch (error) {
+    setAuthMessage(error.message || "Error al reenviar el correo.");
+  } finally {
+    button.disabled = false;
+    button.textContent = "Reenviar correo de verificación";
+  }
+});
 
   db.auth.onAuthStateChange((_event, session) => {
     $("auth").hidden = !!session;
@@ -203,7 +274,11 @@ function setRoleView() {
   });
   $("sidebarEmail").textContent = `${currentUser?.email || ""} · ${isTeacher ? "Profesor" : "Estudiante"}`;
   $("who").textContent = `${isTeacher ? "Profesor" : "Estudiante"} · ${currentUser?.email || ""}`;
-  showTab(isTeacher ? "docente" : "panel");
+
+  const savedTab = localStorage.getItem(`elevate-last-tab-${isTeacher ? "teacher" : "student"}`);
+  const allowedTabs = isTeacher ? ["docente", "notificaciones"] : ["panel", "metas", "tareas", "elevate-ai", "notificaciones", "calc", "importar", "extension"];
+
+  showTab(allowedTabs.includes(savedTab) ? savedTab : (isTeacher ? "docente" : "panel"));
 }
 
 // ===== Datos =====
@@ -254,7 +329,18 @@ async function load() {
 // ===== Elevate AI: recomendaciones y chat con contexto del estudiante =====
 async function invokeElevateAI(body) {
   const { data, error } = await db.functions.invoke("elevate-ai", { body });
-  if (error) throw new Error(error.message || "No se pudo conectar con Elevate AI.");
+  if (error) {
+    let message = error.message || "No se pudo conectar con Elevate AI.";
+    try {
+      const response = error.context;
+      const text = await response?.text?.();
+      let detail = null;
+      try { detail = JSON.parse(text); } catch { /* no era JSON */ }
+      const reason = detail?.error || detail?.message || text;
+      message = `${reason || message}${response?.status ? ` (código ${response.status})` : ""}`;
+    } catch { /* se queda con el mensaje genérico */ }
+    throw new Error(message);
+  }
   if (!data || typeof data !== "object") throw new Error("Elevate AI devolvió una respuesta vacía.");
   if (data.error) throw new Error(String(data.error));
   return data;
@@ -328,18 +414,50 @@ function renderAIConversationList() {
     </button>`).join("") || `<p class="muted ai-empty-history">Tus conversaciones aparecerán aquí.</p>`;
 }
 
+
 function renderAIMessages(showTyping = false) {
   const rows = aiMessages.length ? aiMessages : [{
     role: "assistant",
     content: "¡Hola! Puedo ayudarte a entender tu progreso y pensar un plan de estudio. Pregúntame sobre tus materias, evaluaciones o metas."
   }];
-  $("aiMessages").innerHTML = rows.map(message => `
-    <article class="ai-message ${message.role === "user" ? "user" : "assistant"}">
-      <strong>${message.role === "user" ? "Tú" : "Elevate AI"}</strong>
-      <p>${esc(message.content).replace(/\n/g, "<br>")}</p>
-    </article>`).join("") + (showTyping ? `<article class="ai-message assistant ai-typing" role="status"><strong>Elevate AI</strong><p><span></span><span></span><span></span> Analizando tu pregunta…</p></article>` : "");
-  $("aiMessages").scrollTop = $("aiMessages").scrollHeight;
+
+  const container = $("aiMessages");
+
+  container.innerHTML = rows.map(message => {
+    const isUser = message.role === "user";
+
+    const content = isUser
+      ? esc(message.content).replace(/\n/g, "<br>")
+      : DOMPurify.sanitize(
+          marked.parse(message.content, {
+            breaks: true,
+            gfm: true
+          })
+        );
+
+    return `
+      <article class="ai-message ${isUser ? "user" : "assistant"}">
+        <strong>${isUser ? "Tú" : "Elevate AI"}</strong>
+        <div class="ai-message-content">${content}</div>
+      </article>
+    `;
+  }).join("") + (showTyping ? `
+    <article class="ai-message assistant ai-typing" role="status">
+      <strong>Elevate AI</strong>
+      <p><span></span><span></span><span></span> Analizando tu pregunta…</p>
+    </article>
+  ` : "");
+
+  // Renderizar fórmulas matemáticas
+  if (window.MathJax?.typesetPromise) {
+    MathJax.typesetPromise([container]).catch(error => {
+      console.error("Error al renderizar fórmulas:", error);
+    });
+  }
+
+  container.scrollTop = container.scrollHeight;
 }
+
 
 async function loadAIConversations() {
   $("aiHistoryStatus").textContent = "Cargando tus conversaciones…";
@@ -1101,6 +1219,9 @@ function showTab(t) {
   };
   if (isTeacher && ["panel", "metas", "tareas", "elevate-ai", "calc", "extension", "importar"].includes(t)) t = "docente";
   if (!isTeacher && t === "docente") t = "panel";
+  if (currentUser) {
+    localStorage.setItem(`elevate-last-tab-${isTeacher ? "teacher" : "student"}`, t);
+  }
   document.querySelectorAll("[data-view]").forEach(section => { section.hidden = section.dataset.view !== t; });
   document.querySelectorAll("[data-go]").forEach(button => {
     const active = button.dataset.go === t;

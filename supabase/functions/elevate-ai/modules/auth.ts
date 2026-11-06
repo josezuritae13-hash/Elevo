@@ -25,7 +25,7 @@ export function parseBearer(request: Request): string {
   return match[1];
 }
 
-/** Valida el token con Supabase Auth y exige una cuenta de estudiante. */
+/** Valida el token y obtiene el rol institucional desde el perfil protegido. */
 export async function authenticateStudent(request: Request, config: FunctionConfig): Promise<Session> {
   const token = parseBearer(request);
   const authResponse = await fetch(`${config.baseUrl.replace(/\/$/, "")}/auth/v1/user`, {
@@ -35,12 +35,16 @@ export async function authenticateStudent(request: Request, config: FunctionConf
   if (!authResponse.ok || !isRecord(authUser) || typeof authUser.id !== "string") {
     throw new HttpError(401, "Tu sesión expiró. Vuelve a iniciar sesión.");
   }
-  const session: Session = { baseUrl: config.baseUrl, anonKey: config.anonKey, token, userId: authUser.id };
-  const profiles = await selectRows<{ id: string; role: string }>(session, "profiles", {
-    id: `eq.${session.userId}`, select: "id,role", limit: "1"
+  const email = typeof authUser.email === "string" ? authUser.email.trim().toLowerCase() : "";
+  const session: Session = { baseUrl: config.baseUrl, anonKey: config.anonKey, token, userId: authUser.id, email, role: "student" };
+  const profiles = await selectRows<{ id: string; role: string; email: string }>(session, "profiles", {
+    id: `eq.${session.userId}`, select: "id,role,email", limit: "1"
   });
-  if (!profiles[0] || profiles[0].role !== "student") {
-    throw new HttpError(403, "Elevate AI está disponible para cuentas de estudiante.");
+  const profile = profiles[0];
+  if (!profile || !["student", "teacher"].includes(profile.role)) {
+    throw new HttpError(403, "Tu cuenta no tiene un rol institucional válido para Elevate AI.");
   }
+  session.role = profile.role as "student" | "teacher";
+  session.email = email || String(profile.email || "").toLowerCase();
   return session;
 }

@@ -15,10 +15,12 @@ export async function handleChat(
   message: string,
   requestedConversationId: string | null,
   context: Record<string, unknown>,
-  model: ModelConfig
+  model: ModelConfig,
+  temporary = false,
+  temporaryHistory: ConversationMessage[] = []
 ): Promise<Record<string, unknown>> {
-  let history: ConversationMessage[] = [];
-  if (requestedConversationId) {
+  let history: ConversationMessage[] = temporary ? temporaryHistory.slice(-12) : [];
+  if (requestedConversationId && !temporary) {
     if (!UUID.test(requestedConversationId)) {
       throw new HttpError(400, "La conversación seleccionada no es válida.");
     }
@@ -37,7 +39,7 @@ export async function handleChat(
     history = previous.reverse();
   }
 
-  await consumeQuota(session);
+  const quota = await consumeQuota(session, !temporary && !requestedConversationId);
   const answer = await callModel(model, [
     {
       role: "system",
@@ -48,7 +50,10 @@ export async function handleChat(
   ]);
 
   const now = Date.now();
-  let conversationId = requestedConversationId;
+  let conversationId = temporary ? null : requestedConversationId;
+  if (temporary) {
+    return { conversation_id: null, answer, temporary: true, quota };
+  }
   if (!conversationId) {
     const created = await adminWrite(admin, "ai_conversations", {
       method: "POST",
@@ -92,5 +97,5 @@ export async function handleChat(
       }
     ])
   });
-  return { conversation_id: conversationId, answer };
+  return { conversation_id: conversationId, answer, quota };
 }

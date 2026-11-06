@@ -84,6 +84,8 @@ export type Session = {
   anonKey: string;
   token: string;
   userId: string;
+  email: string;
+  role: "student" | "teacher";
 };
 
 export class HttpError extends Error {

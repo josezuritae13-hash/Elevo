@@ -159,6 +159,8 @@ h1, h2, h3, strong { font-family: Manrope, "DM Sans", sans-serif; }
 .btn-block { width: 100%; min-height: 47px; }
 .form-message { min-height: 18px; margin: 3px 0 0; color: var(--danger); font-size: 11px; line-height: 1.5; }
 .form-message.success { color: var(--success); }
+.btn-resend-verification { margin-top: 5px; font-size: 11px; }
+.btn-resend-verification[hidden] { display: none; }
 .auth-divider { display: flex; align-items: center; gap: 12px; margin: 20px 0 10px; color: var(--muted-2); font-size: 10px; }
 .auth-divider::before, .auth-divider::after { height: 1px; flex: 1; content: ""; background: var(--border); }
 .auth-note { margin: 0; color: var(--muted-2); font-size: 10px; text-align: center; }
@@ -781,6 +783,15 @@ td .ghost { min-height: 27px; margin: 1px 3px 1px 0; }
 .ai-message.user { align-self: flex-end; border-color: color-mix(in srgb, var(--primary) 30%, var(--border)); border-radius: 13px 13px 4px 13px; background: var(--primary-soft); }
 .ai-message strong { color: var(--text); font-size: 9px; }
 .ai-message p { margin: 4px 0 0; color: var(--text); font-size: 11px; line-height: 1.65; overflow-wrap: anywhere; }
+.ai-message-content { margin-top: 4px; color: var(--text); font-size: 11px; line-height: 1.75; overflow-wrap: anywhere; }
+.ai-message-content p { margin: 5px 0; font-size: inherit; }
+.ai-message-content h1, .ai-message-content h2, .ai-message-content h3 { margin: 12px 0 6px; color: var(--text); font-size: 13px; }
+.ai-message-content ul, .ai-message-content ol { padding-left: 20px; margin: 7px 0; }
+.ai-message-content li { margin: 4px 0; }
+.ai-message-content strong { font-size: inherit; font-weight: 700; }
+.ai-message-content code { padding: 2px 5px; border-radius: 4px; background: var(--surface); }
+.ai-message-content blockquote { margin: 8px 0; padding-left: 10px; border-left: 3px solid var(--primary); }
+.ai-message-content mjx-container { max-width: 100%; overflow-x: auto; overflow-y: hidden; }
 .ai-typing p { display: flex; align-items: center; gap: 4px; color: var(--muted); }
 .ai-typing p span { width: 5px; height: 5px; border-radius: 50%; background: var(--primary); animation: ai-bounce .8s infinite alternate; }
 .ai-typing p span:nth-child(2) { animation-delay: .2s; }
